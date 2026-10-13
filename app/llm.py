@@ -12,7 +12,7 @@ from app.core import template_explain
 from app.engine import Extracted
 
 load_dotenv()
-MODEL = "gemini-3.5-flash-lite"    # Gemini model, used for photos. Change here if retired.
+MODEL = "gemini-3.5-flash-lite"
 
 PROMPT = ChatPromptTemplate.from_messages([
     ("system",
@@ -101,8 +101,16 @@ EXTRACT_SYSTEM = (
     "NEVER solve, fix or improve anything: copy exactly what the student wrote, "
     "including their mistakes. If handwriting is unclear, give your best reading. "
     "If maths is spoken in words (like 'x squared plus three x'), write it as symbols (x^2 + 3x). "
-    "subject is 'algebra' for equations to solve: put every equation in steps, in order "
-    "(a single equation with no working is fine). "
+
+    "IMPORTANT RULE: if the student's message is a QUESTION (starts with 'what is', "
+    "'find', 'calculate', 'compute', 'differentiate', 'integrate', 'solve', or ends with "
+    "'?'), it is NOT a solution attempt. Never put it in 'steps'. Put the mathematical "
+    "part in 'expression', and set subject to 'derivative' or 'integral' if the question "
+    "asks for those, otherwise 'algebra' if it's an equation to solve. Leave student_answer empty. "
+
+    "subject is 'algebra' for equations the student is SOLVING STEP BY STEP: put every "
+    "equation in steps, in order (a single equation with no working is fine, but only if "
+    "the student is presenting their working). "
     "subject is 'derivative' or 'integral' for differentiating or integrating: put the "
     "function in expression, and the student's final answer in student_answer (empty if none). "
     "subject is 'chemistry_balance' for balancing a chemical equation: put the unbalanced "

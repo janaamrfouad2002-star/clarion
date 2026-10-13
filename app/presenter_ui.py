@@ -11,16 +11,12 @@ from app.avatar import render_presenter_avatar
 def _init():
     ss = st.session_state
     ss.setdefault("presenter_chat", [])
-    # NOTE: presenter_lang always stores the INTERNAL name:
-    # "English" | "Hindi" | "Arabic" | "French"
     ss.setdefault("presenter_lang", "English")
     ss.setdefault("presenter_context", "")
     ss.setdefault("last_presenter_audio", None)
     ss.setdefault("last_presenter_reply", "")
     ss.setdefault("presenter_mp3", None)
     ss.setdefault("presenter_autoplay", False)
-    # Unique nonce for the mic widget, so a finished recording doesn't
-    # trigger "An error has occurred, please try again." on the next rerun.
     ss.setdefault("mic_nonce", 0)
 
 
@@ -41,10 +37,9 @@ def _say(role, content, speak_it=False):
         st.session_state.presenter_autoplay = bool(mp3)
         st.session_state.last_presenter_reply = content
         if not mp3:
-            st.warning(f"No audio for **{lang_now}**. Check the terminal for SPEAK ERROR.")
+            st.warning(f"No audio for **{lang_now}**. Check the terminal.")
 
 
-# Display strings the user sees -> internal names the code uses
 DISPLAY_TO_INTERNAL = {
     "English": "English",
     "हिन्दी": "Hindi",
@@ -61,7 +56,7 @@ def render():
     st.subheader("🎤 Presenter bot")
     st.caption("Talk live during your demo — it answers, explains and translates.")
 
-    # ---------- LANGUAGE PICKER FIRST (uses display names, stores internal) ----------
+    # ---------- LANGUAGE PICKER FIRST ----------
     display_names = list(DISPLAY_TO_INTERNAL.keys())
     current_display = INTERNAL_TO_DISPLAY.get(ss.presenter_lang, "English")
 
@@ -125,9 +120,6 @@ def render():
         _render_msg(m)
 
     # ---------- voice input ----------
-    # The widget key changes after each recording, so Streamlit doesn't keep
-    # feeding back the finished audio on the next rerun (that caused the
-    # "An error has occurred, please try again." message).
     with st.expander("🎙️ Speak to the presenter", expanded=False):
         audio = st.audio_input(
             "Record your question",
@@ -146,7 +138,6 @@ def render():
                 else:
                     ss.presenter_lang = detected or ss.presenter_lang
                     _say("user", f"🎤 {text}")
-                    # Bump the nonce so the next render starts with a fresh widget
                     ss.mic_nonce += 1
                     _handle_turn(text, ss.presenter_lang, speak_it=True)
                     st.rerun()

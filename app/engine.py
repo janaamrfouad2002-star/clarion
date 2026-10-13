@@ -30,8 +30,32 @@ def solve_question(ex: Extracted) -> dict:
         return {"status": "solved", "subject": "integral",
                 "question": f"integral of {ex.expression}",
                 "answer": f"{integrate(f, core.x)} + C"}
+
     if ex.subject == "algebra" and ex.steps:
-        first = ex.steps[0].replace("^", "**")
+        first_raw = ex.steps[0]
+        first = first_raw.replace("^", "**")
+        low = first_raw.lower()
+
+        # A natural-language derivative/integral question mislabeled as algebra
+        if "derivative" in low or "differentiate" in low:
+            expr = first_raw.lower().split("of", 1)[-1].strip(" ?.")
+            try:
+                f = calculus.parse(expr)
+                return {"status": "solved", "subject": "derivative",
+                        "question": f"derivative of {expr}",
+                        "answer": str(f.diff(core.x))}
+            except Exception:
+                return {"status": "unsupported"}
+        if "integral" in low or "integrate" in low:
+            expr = first_raw.lower().split("of", 1)[-1].strip(" ?.")
+            try:
+                f = calculus.parse(expr)
+                return {"status": "solved", "subject": "integral",
+                        "question": f"integral of {expr}",
+                        "answer": f"{integrate(f, core.x)} + C"}
+            except Exception:
+                return {"status": "unsupported"}
+
         if "=" not in first:
             try:
                 val = sympify(first)
@@ -44,6 +68,7 @@ def solve_question(ex: Extracted) -> dict:
             return {"status": "unsupported"}
         return {"status": "solved", "subject": "algebra",
                 "question": ex.steps[0], "answer": f"x = {sym_solve(eq, core.x)}"}
+
     if ex.subject == "chemistry_balance" and ex.expression.strip():
         return {"status": "solved", "subject": "chemistry_balance",
                 "question": f"Balance: {ex.expression}",
@@ -57,27 +82,33 @@ def solve_question(ex: Extracted) -> dict:
 
 def analyse(ex: Extracted) -> dict:
     if ex.subject == "algebra":
-        if len(ex.steps) >= 2:
-            steps = [s.replace("^", "**") for s in ex.steps]
+        # Only treat as a *solution attempt* if there are at least 2 equations.
+        steps = [s.replace("^", "**") for s in ex.steps if "=" in s]
+        if len(steps) >= 2:
             i = core.first_wrong_step(steps)
             if i is None:
                 return {"status": "correct", "subject": "algebra"}
             return {"status": "wrong", "subject": "algebra",
                     "tag": core.diagnose(steps[i - 1], steps[i]),
                     "prev": steps[i - 1], "wrong": steps[i]}
+        # Single line or no equations → a question, not an attempt.
         return solve_question(ex)
+
     if ex.subject in ("derivative", "integral"):
         if ex.student_answer.strip():
             return calculus.check(ex.subject, ex.expression, ex.student_answer)
         return solve_question(ex)
+
     if ex.subject == "chemistry_balance":
         if ex.student_answer.strip():
             return science.check_balance(ex.student_answer)
         return solve_question(ex)
+
     if ex.subject == "physics_calc":
         if ex.student_answer.strip():
             return science.check_calc(ex.expression, ex.student_answer)
         return solve_question(ex)
+
     return {"status": "unsupported"}
 
 
