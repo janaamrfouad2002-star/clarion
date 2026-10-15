@@ -6,7 +6,7 @@ import time
 import pandas as pd
 import streamlit as st
 
-from app import academic, auth
+from app import academic, auth, history, flashcards, quiz, rooms
 from app.core import record, due, mistake_map
 from app.engine import analyse, make_twin, check_twin
 from app.extras import (LANGS, AUTO, CODE, T, GESTURE_REPLY, detect_language,
@@ -15,7 +15,7 @@ from app.llm import (extract, explain_with_llm, explain_solution, answer_questio
                      simplify, translate_text)
 from app.presenter_ui import render as render_presenter
 
-st.set_page_config(page_title="Mistake-to-Mastery", page_icon="🎓",
+st.set_page_config(page_title="Lumen", page_icon="💡",
                    layout="wide", initial_sidebar_state="expanded")
 
 # ============================================================
@@ -71,6 +71,10 @@ header[data-testid="stHeader"] { background: transparent; }
 .task.high { border-left-color:var(--bad); } .task.low { border-left-color:var(--ok); }
 .task.done .tt { text-decoration:line-through; opacity:.5; }
 .task small { color:var(--muted); font-weight:400; display:block; }
+.task .tt { font-weight:700; }
+.task.overdue { border-left-color:#dc2626; background:#fef2f2; }
+.task.today   { border-left-color:#f59e0b; background:#fffbeb; }
+.task.soon    { border-left-color:#f59e0b; }
 .card { background:#fff; border:1px solid var(--line); border-radius:16px; padding:16px 18px; }
 
 div.stButton > button { border-radius:10px; border:1px solid var(--line); background:#fff;
@@ -84,11 +88,15 @@ div.stButton > button[kind="primary"], div.stFormSubmitButton > button[kind="pri
 [data-testid="stChatInput"] { border-radius:20px !important; border:1px solid #c7d2fe !important;
   background:#fff !important; box-shadow:0 14px 34px -16px rgba(99,102,241,.6); }
 [data-testid="stBottom"] > div { background:transparent !important; }
+
+[data-testid="stFileUploader"] section { padding: 4px 8px !important; min-height: 40px !important; }
+[data-testid="stFileUploader"] small { display:none !important; }
+[data-testid="stFileUploader"] label { display:none !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# TEXT: navigation, pages and login in 4 languages
+# TEXT
 # ============================================================
 S = {
     "English": dict(
@@ -103,7 +111,24 @@ S = {
         gesture_help="Allow the camera, then show 👍 👎 ☝️ or ✋.",
         chat_hint="Ask below any time. Your answer opens in Learn.",
         g_up="👍 Got it", g_down="👎 Explain it simpler", g_point="☝️ I have a question",
-        g_palm="✋ Please wait", no_mistakes="No mistakes recorded yet."),
+        g_palm="✋ Please wait", no_mistakes="No mistakes recorded yet.",
+        teacher="Teacher", flashcards="Flashcards", quiz="Quiz",
+        fl_generate="Generate from mistakes", fl_new="New card", fl_front="Front",
+        fl_back="Back", fl_add="Add card", fl_due="Due for review", fl_learned="Learned",
+        fl_review="How well did you know it?", fl_again="Again", fl_hard="Hard",
+        fl_good="Good", fl_easy="Easy", fl_empty="No cards yet. Generate some from mistakes!",
+        quiz_start="Start quiz", quiz_next="Next question", quiz_score="Score",
+        quiz_time="Time left", quiz_progress="Question", quiz_done="Quiz complete!",
+        quiz_again="Play again", quiz_write="Write your working (one equation per line)",
+        quiz_submit="Submit answer", quiz_timer="seconds per question",
+        quiz_syllabus="Or upload a syllabus to generate a quiz:",
+        quiz_build="Build quiz from this file",
+        plan_syllabus="Generate a plan from your syllabus",
+        plan_upload="Upload syllabus (PDF or text)",
+        plan_days="Days available", plan_hours="Hours per day",
+        plan_build="Build my plan",
+        rooms="Study rooms",
+        surprise="Surprise me"),
     "Hindi": dict(
         learn="सीखें", present="प्रस्तुति", tracking="मेरी प्रगति", planner="अकादमिक योजना",
         gestures="लाइव इशारे", right="सही", wrong="गलत", mastered="सीख लिया",
@@ -112,37 +137,88 @@ S = {
         add_task="कार्य जोड़ें", task="कार्य", subject="विषय (वैकल्पिक)",
         due="अंतिम तिथि (वैकल्पिक)", priority="प्राथमिकता", add="जोड़ें", done="पूरा", undo="वापस",
         no_tasks="अभी कोई कार्य नहीं।", of_done="पूरे",
-        present_sub="डेमो के दौरान लाइव बोलें। यह जवाब देता, समझाता और अनुवाद करता है।",
+        present_sub="डेमो के दौरान लाइव बोलें।",
         gesture_help="कैमरा चालू करें, फिर 👍 👎 ☝️ या ✋ दिखाएँ।",
-        chat_hint="कभी भी नीचे पूछें। जवाब 'सीखें' पेज पर खुलेगा।",
+        chat_hint="कभी भी नीचे पूछें।",
         g_up="👍 समझ गया", g_down="👎 और आसान समझाओ", g_point="☝️ मेरा एक सवाल है",
-        g_palm="✋ रुकिए", no_mistakes="अभी कोई गलती दर्ज नहीं।"),
+        g_palm="✋ रुकिए", no_mistakes="अभी कोई गलती दर्ज नहीं।",
+        teacher="शिक्षक", flashcards="फ्लैशकार्ड", quiz="क्विज़",
+        fl_generate="गलतियों से बनाएँ", fl_new="नया कार्ड", fl_front="सामने",
+        fl_back="पीछे", fl_add="जोड़ें", fl_due="दोहराने के लिए", fl_learned="सीखा",
+        fl_review="कितना आया?", fl_again="फिर से", fl_hard="कठिन",
+        fl_good="ठीक", fl_easy="आसान", fl_empty="अभी कोई कार्ड नहीं।",
+        quiz_start="क्विज़ शुरू करें", quiz_next="अगला सवाल", quiz_score="स्कोर",
+        quiz_time="बचा समय", quiz_progress="प्रश्न", quiz_done="क्विज़ पूरी!",
+        quiz_again="फिर खेलें", quiz_write="अपना हल लिखें",
+        quiz_submit="जमा करें", quiz_timer="प्रति प्रश्न सेकंड",
+        quiz_syllabus="या सिलेबस अपलोड करें:",
+        quiz_build="इस फ़ाइल से क्विज़ बनाएँ",
+        plan_syllabus="सिलेबस से योजना बनाएँ",
+        plan_upload="सिलेबस अपलोड करें (PDF या टेक्स्ट)",
+        plan_days="उपलब्ध दिन", plan_hours="प्रति दिन घंटे",
+        plan_build="मेरी योजना बनाएँ",
+        rooms="अध्ययन कक्ष",
+        surprise="कुछ नया दिखाओ"),
     "Arabic": dict(
         learn="تعلّم", present="عرض", tracking="تقدّمي", planner="المخطط الدراسي",
         gestures="إيماءات مباشرة", right="صحيح", wrong="خطأ", mastered="أتقنتها",
         accuracy="الدقة", recent="النشاط الأخير",
-        no_activity="لا شيء بعد. اطرح سؤالك الأول!",
+        no_activity="لا شيء بعد.",
         add_task="أضف مهمة", task="المهمة", subject="المادة (اختياري)",
         due="تاريخ التسليم (اختياري)", priority="الأولوية", add="إضافة", done="تم", undo="تراجع",
         no_tasks="لا توجد مهام بعد.", of_done="منجزة",
-        present_sub="تحدّث مباشرة أثناء العرض. يجيب ويشرح ويترجم.",
+        present_sub="تحدّث مباشرة أثناء العرض.",
         gesture_help="اسمح بالكاميرا ثم أظهر 👍 👎 ☝️ أو ✋.",
-        chat_hint="اسأل في الأسفل في أي وقت. ستظهر الإجابة في صفحة «تعلّم».",
-        g_up="👍 فهمت", g_down="👎 اشرح بشكل أبسط", g_point="☝️ لدي سؤال",
-        g_palm="✋ انتظر من فضلك", no_mistakes="لا توجد أخطاء مسجلة بعد."),
+        chat_hint="اسأل في الأسفل في أي وقت.",
+        g_up="👍 فهمت", g_down="👎 اشرح أبسط", g_point="☝️ لدي سؤال",
+        g_palm="✋ انتظر", no_mistakes="لا توجد أخطاء بعد.",
+        teacher="المعلم", flashcards="بطاقات", quiz="اختبار",
+        fl_generate="أنشئ من الأخطاء", fl_new="بطاقة جديدة", fl_front="الأمام",
+        fl_back="الخلف", fl_add="إضافة", fl_due="للمراجعة", fl_learned="تعلمتها",
+        fl_review="كيف كان أداؤك؟", fl_again="مرة أخرى", fl_hard="صعب",
+        fl_good="جيد", fl_easy="سهل", fl_empty="لا توجد بطاقات بعد.",
+        quiz_start="ابدأ الاختبار", quiz_next="السؤال التالي", quiz_score="النتيجة",
+        quiz_time="الوقت المتبقي", quiz_progress="سؤال", quiz_done="انتهى!",
+        quiz_again="العب مرة أخرى", quiz_write="اكتب حلك",
+        quiz_submit="إرسال", quiz_timer="ثانية لكل سؤال",
+        quiz_syllabus="أو ارفع المنهج:",
+        quiz_build="أنشئ اختباراً من هذا الملف",
+        plan_syllabus="أنشئ خطة من المنهج",
+        plan_upload="ارفع المنهج (PDF أو نص)",
+        plan_days="الأيام المتاحة", plan_hours="ساعات يومياً",
+        plan_build="أنشئ خطتي",
+        rooms="غرف الدراسة",
+        surprise="فاجئني"),
     "French": dict(
-        learn="Apprendre", present="Présenter", tracking="Ma progression", planner="Planificateur",
-        gestures="Gestes en direct", right="Justes", wrong="Fausses", mastered="Maîtrisées",
-        accuracy="Précision", recent="Activité récente",
-        no_activity="Rien pour le moment. Posez votre première question !",
+        learn="Apprendre", present="Présenter", tracking="Ma progression",
+        planner="Planificateur", gestures="Gestes", right="Justes", wrong="Fausses",
+        mastered="Maîtrisées", accuracy="Précision", recent="Activité récente",
+        no_activity="Rien pour le moment.",
         add_task="Ajouter une tâche", task="Tâche", subject="Matière (facultatif)",
         due="Échéance (facultatif)", priority="Priorité", add="Ajouter", done="Fait", undo="Annuler",
         no_tasks="Aucune tâche.", of_done="terminées",
-        present_sub="Parlez en direct pendant votre démo. Il répond, explique et traduit.",
+        present_sub="Parlez en direct pendant votre démo.",
         gesture_help="Autorisez la caméra, puis montrez 👍 👎 ☝️ ou ✋.",
-        chat_hint="Posez votre question en bas à tout moment. La réponse s'ouvre dans Apprendre.",
-        g_up="👍 Compris", g_down="👎 Expliquez plus simplement", g_point="☝️ J'ai une question",
-        g_palm="✋ Attendez s'il vous plaît", no_mistakes="Aucune erreur enregistrée."),
+        chat_hint="Posez votre question en bas.",
+        g_up="👍 Compris", g_down="👎 Plus simple", g_point="☝️ Une question",
+        g_palm="✋ Attendez", no_mistakes="Aucune erreur.",
+        teacher="Enseignant", flashcards="Cartes", quiz="Quiz",
+        fl_generate="Générer depuis les erreurs", fl_new="Nouvelle carte", fl_front="Recto",
+        fl_back="Verso", fl_add="Ajouter", fl_due="À réviser", fl_learned="Apprises",
+        fl_review="Comment était-ce ?", fl_again="Encore", fl_hard="Difficile",
+        fl_good="Bien", fl_easy="Facile", fl_empty="Pas encore de cartes.",
+        quiz_start="Démarrer", quiz_next="Suivant", quiz_score="Score",
+        quiz_time="Temps restant", quiz_progress="Question", quiz_done="Terminé !",
+        quiz_again="Rejouer", quiz_write="Votre résolution",
+        quiz_submit="Envoyer", quiz_timer="secondes par question",
+        quiz_syllabus="Ou téléversez votre programme :",
+        quiz_build="Créer un quiz depuis ce fichier",
+        plan_syllabus="Créer un plan depuis le programme",
+        plan_upload="Téléverser le programme (PDF ou texte)",
+        plan_days="Jours disponibles", plan_hours="Heures par jour",
+        plan_build="Créer mon plan",
+        rooms="Salles d'étude",
+        surprise="Surprends-moi"),
 }
 
 LG = {
@@ -158,50 +234,40 @@ LG = {
         guest_note="Guest progress is not saved to an account.", hello="Hello"),
     "Hindi": dict(
         login="लॉग इन", signup="खाता बनाएँ", username="उपयोगकर्ता नाम", password="पासवर्ड",
-        confirm="पासवर्ड दोबारा लिखें", login_btn="लॉग इन", signup_btn="खाता बनाएँ",
-        guest="अतिथि के रूप में जारी रखें", bad_login="उपयोगकर्ता नाम या पासवर्ड गलत है।",
-        locked="बहुत ज़्यादा कोशिशें। कृपया {n} सेकंड रुकें।",
-        created="खाता बन गया! लॉग इन हो रहा है…",
-        bad_user="उपयोगकर्ता नाम: 3 से 30 अक्षर, अंक, . _ या -",
-        short_pw="पासवर्ड कम से कम 6 अक्षरों का होना चाहिए।",
-        taken="यह उपयोगकर्ता नाम पहले से लिया जा चुका है।",
-        mismatch="पासवर्ड मेल नहीं खाते।", logout="लॉग आउट",
-        guest_note="अतिथि की प्रगति किसी खाते में सहेजी नहीं जाती।", hello="नमस्ते"),
+        confirm="पासवर्ड दोबारा", login_btn="लॉग इन", signup_btn="खाता बनाएँ",
+        guest="अतिथि के रूप में जारी रखें", bad_login="गलत उपयोगकर्ता नाम या पासवर्ड।",
+        locked="बहुत ज़्यादा कोशिशें। {n} सेकंड रुकें।",
+        created="खाता बन गया!",
+        bad_user="3 से 30 अक्षर, अंक, . _ या -", short_pw="कम से कम 6 अक्षर।",
+        taken="यह नाम लिया जा चुका है।", mismatch="पासवर्ड मेल नहीं।",
+        logout="लॉग आउट", guest_note="अतिथि की प्रगति सहेजी नहीं जाती।", hello="नमस्ते"),
     "Arabic": dict(
-        login="تسجيل الدخول", signup="إنشاء حساب", username="اسم المستخدم",
-        password="كلمة المرور", confirm="تأكيد كلمة المرور", login_btn="دخول",
-        signup_btn="إنشاء الحساب", guest="المتابعة كضيف",
-        bad_login="اسم المستخدم أو كلمة المرور غير صحيحة.",
+        login="دخول", signup="إنشاء حساب", username="اسم المستخدم", password="كلمة المرور",
+        confirm="تأكيد كلمة المرور", login_btn="دخول", signup_btn="إنشاء الحساب",
+        guest="المتابعة كضيف", bad_login="بيانات الدخول غير صحيحة.",
         locked="محاولات كثيرة. انتظر {n} ثانية.",
-        created="تم إنشاء الحساب! جارٍ تسجيل الدخول…",
-        bad_user="اسم المستخدم: من 3 إلى 30 حرفاً أو رقماً أو . _ أو -",
-        short_pw="يجب ألا تقل كلمة المرور عن 6 أحرف.", taken="اسم المستخدم مستخدم بالفعل.",
-        mismatch="كلمتا المرور غير متطابقتين.", logout="تسجيل الخروج",
-        guest_note="تقدّم الضيف لا يُحفظ في حساب.", hello="مرحباً"),
+        created="تم إنشاء الحساب!",
+        bad_user="من 3 إلى 30 حرفاً", short_pw="6 أحرف على الأقل.",
+        taken="الاسم مستخدم", mismatch="كلمتا المرور غير متطابقتين.",
+        logout="خروج", guest_note="تقدّم الضيف لا يُحفظ.", hello="مرحباً"),
     "French": dict(
         login="Connexion", signup="Créer un compte", username="Nom d'utilisateur",
-        password="Mot de passe", confirm="Confirmer le mot de passe", login_btn="Se connecter",
-        signup_btn="Créer le compte", guest="Continuer en invité",
-        bad_login="Nom d'utilisateur ou mot de passe incorrect.",
-        locked="Trop d'essais. Patientez {n} secondes.",
-        created="Compte créé ! Connexion…",
-        bad_user="Nom d'utilisateur : 3 à 30 lettres, chiffres, . _ ou -",
-        short_pw="Le mot de passe doit contenir au moins 6 caractères.",
-        taken="Ce nom d'utilisateur est déjà pris.",
-        mismatch="Les mots de passe ne correspondent pas.", logout="Se déconnecter",
-        guest_note="La progression d'un invité n'est pas enregistrée dans un compte.",
-        hello="Bonjour"),
+        password="Mot de passe", confirm="Confirmer", login_btn="Se connecter",
+        signup_btn="Créer", guest="Invité", bad_login="Identifiants incorrects.",
+        locked="Trop d'essais. Patientez {n} s.", created="Compte créé !",
+        bad_user="3 à 30 caractères", short_pw="6 caractères minimum.",
+        taken="Nom déjà utilisé", mismatch="Mots de passe différents.",
+        logout="Déconnexion", guest_note="Progression invité non enregistrée.", hello="Bonjour"),
 }
 
 # ============================================================
-# STATE AND SMALL HELPERS
+# STATE
 # ============================================================
 ss = st.session_state
 ss.setdefault("chat", [])
 ss.setdefault("ui_lang", "English")
 ss.setdefault("lang_pref", AUTO)
 ss.setdefault("page", "learn")
-ss.setdefault("history", {})
 ss.setdefault("user", None)
 ss.setdefault("fails", 0)
 ss.setdefault("locked_until", 0.0)
@@ -238,19 +304,35 @@ def lang_picker(key: str):
         st.rerun()
 
 
+# ---------- Safe file reader (import inside function, wrapped in try) ----------
+def extract_uploaded_text(upload):
+    """Return the text of an uploaded .txt or .pdf. Returns '' if anything fails."""
+    if upload is None:
+        return ""
+    try:
+        if upload.type == "application/pdf":
+            import PyPDF2  # local import, no top-level dependency
+            reader = PyPDF2.PdfReader(upload)
+            return "\n".join((p.extract_text() or "") for p in reader.pages)
+        return upload.read().decode("utf-8", errors="ignore")
+    except Exception as e:
+        st.error(f"Could not read file: {e}")
+        return ""
+
+
 if ss.ui_lang == "Arabic":
     st.markdown("<style>[data-testid='stChatMessage']{direction:rtl;text-align:right}</style>",
                 unsafe_allow_html=True)
 
 
 # ============================================================
-# LOGIN PAGE
+# LOGIN
 # ============================================================
 def login_page():
     lang, t, s, lg = L()
     st.markdown("<style>[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl'],"
                 "[data-testid='collapsedControl']{display:none}</style>", unsafe_allow_html=True)
-    hero("🎓 Mistake-to-Mastery", t["tagline"],
+    hero("💡 Lumen", t["tagline"],
          ["🧠 Verified mistakes", "🗣️ 4 languages", "🎥 Gestures", "🎤 Voice", "📅 Planner"])
     _, mid, _ = st.columns([1, 1.6, 1])
     with mid:
@@ -311,7 +393,7 @@ user = ss.user
 lang, t, s, lg = L()
 
 # ============================================================
-# SIDEBAR: account, language and navigation only
+# SIDEBAR
 # ============================================================
 with st.sidebar:
     st.markdown(
@@ -320,34 +402,44 @@ with st.sidebar:
         unsafe_allow_html=True)
     lang_picker("lp_side")
     st.markdown("---")
-    PAGES = [("learn", "💬", s["learn"]), ("progress", "📊", s["tracking"]),
-             ("gestures", "🎥", s["gestures"]), ("planner", "📅", s["planner"]),
-             ("present", "🎤", s["present"])]
+    PAGES = [("learn", "💬", s["learn"]),
+             ("present", "🎤", s["present"]),
+             ("progress", "📊", s["tracking"]),
+             ("flashcards", "📇", s.get("flashcards", "Flashcards")),
+             ("quiz", "🎯", s.get("quiz", "Quiz")),
+             ("rooms", "👥", s.get("rooms", "Study rooms")),
+             ("gestures", "🎥", s["gestures"]),
+             ("planner", "📅", s["planner"]),
+             ("teacher", "🏫", s.get("teacher", "Teacher"))]
     for key, icon, label in PAGES:
         kind = "primary" if ss.page == key else "secondary"
         if st.button(f"{icon}  {label}", key=f"nav_{key}", use_container_width=True, type=kind):
             ss.page = key
             st.rerun()
     st.markdown("---")
+
     if user.startswith("guest-"):
         st.caption(lg["guest_note"])
     if st.button("🚪 " + lg["logout"], use_container_width=True, key="logout"):
-        for k in ("user", "chat", "twin", "inbox", "last_gesture"):
+        for k in ("user", "chat", "twin", "inbox", "last_gesture",
+                  "quiz_qs", "quiz_i", "quiz_score", "quiz_started"):
             ss.pop(k, None)
         ss.page = "learn"
         st.rerun()
 
 # ============================================================
-# CHAT BAR: pinned at the bottom on every page
+# BOTTOM CHAT BAR — only on Learn
 # ============================================================
 AUDIO_IN_BAR = True
-try:
-    prompt = st.chat_input(t["placeholder"], accept_file=True,
-                           file_type=["png", "jpg", "jpeg"], accept_audio=True)
-except TypeError:                      # older Streamlit: no mic inside the chat bar
-    AUDIO_IN_BAR = False
-    prompt = st.chat_input(t["placeholder"], accept_file=True,
-                           file_type=["png", "jpg", "jpeg"])
+prompt = None
+if ss.page == "learn":
+    try:
+        prompt = st.chat_input(t["placeholder"], accept_file=True,
+                               file_type=["png", "jpg", "jpeg"], accept_audio=True)
+    except TypeError:
+        AUDIO_IN_BAR = False
+        prompt = st.chat_input(t["placeholder"], accept_file=True,
+                               file_type=["png", "jpg", "jpeg"])
 
 if prompt:
     files = getattr(prompt, "files", None) or []
@@ -360,17 +452,19 @@ if prompt:
         "mime": files[0].type if files else "image/png",
         "audio": aud.getvalue() if has_audio else None,
     }
-    if ss.page != "learn":              # answers always appear in the Learn page
+    if ss.page != "learn":
         ss.page = "learn"
         st.rerun()
 
 
 # ============================================================
-# SHARED CHAT FUNCTIONS
+# HELPERS
 # ============================================================
 def log(kind, label, tag=""):
-    entry = {"k": kind, "label": (label or "").replace("\n", " ")[:70], "tag": tag}
-    ss.history.setdefault(user, []).append(entry)
+    try:
+        history.add(user, kind, label, tag)
+    except Exception as e:
+        print("LOG ERROR:", e)
 
 
 def render(m):
@@ -392,7 +486,6 @@ def say(role, content, img=None):
 
 
 def apply_gesture(name: str):
-    """Adds the reply to the chat history and returns it as text."""
     lang_, t_, _, _ = L()
     if name == "Thumb_Down":
         last = next((m["content"] for m in reversed(ss.chat)
@@ -409,12 +502,12 @@ def apply_gesture(name: str):
 
 
 # ============================================================
-# PAGE: LEARN (chat)
+# PAGE: LEARN
 # ============================================================
 def page_learn():
     lang_, t_, s_, lg_ = L()
-    hero("🎓 Mistake-to-Mastery", t_["tagline"],
-         ["🧠 Verified mistakes", "🗣️ 4 languages", "🎥 Gestures", "🎤 Voice", "📅 Planner"])
+    hero("💡 Lumen", t_["tagline"],
+         ["🧠 Verified mistakes", "🗣️ 4 languages", "📇 Flashcards", "🎯 Quiz", "📅 Planner"])
     if ss.chat and st.button("🗑️ " + t_["clear"], key="clear_chat"):
         ss.chat = []
         ss.pop("twin", None)
@@ -469,13 +562,21 @@ def page_learn():
             welcome.empty()
             text = normalize_digits(text)
             start_lang = ss.ui_lang
-            if ss.lang_pref == AUTO:
+            if ss.lang_pref == AUTO and len(text.strip()) >= 4:
                 if from_voice and voice_lang:
                     detected = voice_lang
                 else:
                     detected = detect_language(text)
-                if detected:
-                    ss.ui_lang = detected
+                if detected and detected != ss.ui_lang:
+                    import re as _re
+                    if detected == "Arabic":
+                        script_chars = len(_re.findall(r"[\u0600-\u06FF]", text))
+                    elif detected == "Hindi":
+                        script_chars = len(_re.findall(r"[\u0900-\u097F]", text))
+                    else:
+                        script_chars = len(_re.findall(r"[A-Za-zÀ-ÿ]", text))
+                    if script_chars >= 3:
+                        ss.ui_lang = detected
             lang_, t_, s_, lg_ = L()
 
             say("user", ("🎤 " if from_voice else "") + (text or "📷"), img)
@@ -511,13 +612,22 @@ def page_learn():
                     with st.spinner("..."):
                         hint = explain_with_llm(result["prev"], result["wrong"],
                                                 result["tag"], lang_) or ""
+                    tag_raw = result["tag"]
+                    conf = result.get("confidence", 1.0)
+                    if tag_raw.endswith("?") or conf < 0.99:
+                        base = tag_raw.rstrip("?")
+                        shown = f"{friendly(base)} (≈{int(conf * 100)}% confidence)"
+                    else:
+                        shown = friendly(tag_raw)
                     say("assistant",
-                        f"**{t_['mistake']}:** `{friendly(result['tag'])}`\n\n"
+                        f"**{t_['mistake']}:** `{shown}`\n\n"
                         f"{t_['your_line']}: `{result['wrong']}`\n\n{hint}")
-                    record(user, result["tag"], correct=False)
-                    log("wrong", result["wrong"], result["tag"])
-                    ss["twin"] = {"subject": result["subject"], "tag": result["tag"],
-                                  "problem": make_twin(result["subject"], result["tag"])}
+                    record(user, tag_raw.rstrip("?"), correct=False)
+                    log("wrong", result["wrong"], tag_raw.rstrip("?"))
+                    ss["twin"] = {"subject": result["subject"],
+                                  "tag": tag_raw.rstrip("?"),
+                                  "problem": make_twin(result["subject"],
+                                                        tag_raw.rstrip("?"))}
             if ss.ui_lang != start_lang:
                 st.rerun()
 
@@ -554,20 +664,26 @@ def page_learn():
 
 
 # ============================================================
-# PAGE: MY PROGRESS
+# PAGE: PRESENT
+# ============================================================
+def page_present():
+    lang_, t_, s_, lg_ = L()
+    hero("🎤 " + s_["present"], s_["present_sub"])
+    render_presenter()
+
+
+# ============================================================
+# PAGE: PROGRESS
 # ============================================================
 def page_progress():
     lang_, t_, s_, lg_ = L()
     hero("📊 " + s_["tracking"], s_["chat_hint"])
-    hist = ss.history.setdefault(user, [])
-    n_right = sum(1 for h in hist if h["k"] == "right")
-    n_wrong = sum(1 for h in hist if h["k"] == "wrong")
+    counts = history.counts(user)
+    n_right = counts["right"]
+    n_wrong = counts["wrong"]
     rows = mistake_map(user)
     n_master = sum(1 for r in rows if r[2] >= 3)
-    if n_right + n_wrong:
-        acc = f"{round(100 * n_right / (n_right + n_wrong))}%"
-    else:
-        acc = "–"
+    acc = f"{round(100 * n_right / (n_right + n_wrong))}%" if (n_right + n_wrong) else "–"
     st.markdown(f"""<div class="stats">
       <div class="stat ok"><b>{n_right}</b><span>{s_["right"]}</span></div>
       <div class="stat bad"><b>{n_wrong}</b><span>{s_["wrong"]}</span></div>
@@ -594,28 +710,256 @@ def page_progress():
               <div class="lbl">{errors} {t_["errors"]} · {t_["level"]} {box}/4</div></div></div>""",
                         unsafe_allow_html=True)
         if rows:
-            df = pd.DataFrame({"errors": [r[1] for r in rows]},
-                              index=[friendly(r[0]) for r in rows])
-            st.bar_chart(df)
+            labels = [friendly(r[0]) for r in rows]
+            errors = [r[1] for r in rows]
+            df = pd.DataFrame({"Errors": errors}, index=labels)
+            df.index.name = "Misconception"
+            st.bar_chart(df, height=320, use_container_width=True, color="#6366f1")
         due_tags = due(user)
         if due_tags:
             st.info("🔔 " + t_["due"] + ": " + ", ".join(friendly(x) for x in due_tags))
     with right:
         st.markdown(f'<div class="sec">🕘 {s_["recent"]}</div>', unsafe_allow_html=True)
-        if not hist:
+        recent = history.recent(user, limit=30)
+        if not recent:
             st.caption(s_["no_activity"])
         icon = {"right": "✅", "wrong": "❌", "asked": "💡"}
-        for h in reversed(hist[-30:]):
+        for k, lbl, tg in recent:
             tag_line = ""
-            if h.get("tag"):
-                tag_line = f"<small>{html.escape(friendly(h['tag']))}</small>"
-            st.markdown(f'<div class="act"><span>{icon[h["k"]]}</span><div>'
-                        f'{html.escape(h["label"])}{tag_line}</div></div>',
+            if tg:
+                tag_line = f"<small>{html.escape(friendly(tg))}</small>"
+            st.markdown(f'<div class="act"><span>{icon.get(k, "•")}</span><div>'
+                        f'{html.escape(lbl)}{tag_line}</div></div>',
                         unsafe_allow_html=True)
 
 
 # ============================================================
-# PAGE: LIVE GESTURES
+# PAGE: FLASHCARDS
+# ============================================================
+def page_flashcards():
+    lang_, t_, s_, lg_ = L()
+    hero("📇 Flashcards",
+         "Every mistake you make becomes a card. Review cards you got wrong before.")
+
+    st_stats = flashcards.stats(user)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Due for review", st_stats["due"])
+    c2.metric("Total cards", st_stats["total"])
+    c3.metric("Learned", st_stats["learned"])
+
+    st.markdown('<div class="sec">✨ Auto-generate from your mistakes</div>',
+                unsafe_allow_html=True)
+    st.caption("Reads every wrong step you have made in Learn and turns it into a card.")
+    if st.button("Generate now", type="primary", use_container_width=True,
+                 key="fc_gen"):
+        n = flashcards.generate_from_history(user)
+        if n == 0:
+            st.info("No new mistakes to convert. Make a wrong attempt in Learn first, "
+                    "then click this again.")
+        else:
+            st.success(f"Added {n} new card(s).")
+            st.rerun()
+
+    st.markdown('<div class="sec">📖 Cards due for review</div>', unsafe_allow_html=True)
+    cards = flashcards.due_cards(user, limit=20)
+    if not cards:
+        st.success("Nothing due. Nice work!")
+    else:
+        for cid, front, back, tag in cards[:5]:
+            with st.container(border=True):
+                st.markdown(f"**{front}**")
+                with st.expander("Show answer"):
+                    st.markdown(back)
+                bc = st.columns(4)
+                for i, (label, q) in enumerate(
+                        [("Again", 0), ("Hard", 1), ("Good", 2), ("Easy", 3)]):
+                    if bc[i].button(label, key=f"rev_{cid}_{i}", use_container_width=True):
+                        flashcards.review(user, cid, q)
+                        st.rerun()
+
+    with st.expander("➕ Add your own card (optional)"):
+        st.caption("Front = the question. Back = the answer. Most cards come from "
+                   "your mistakes automatically — you only need this if you want a "
+                   "card that isn't based on an error.")
+        front_in = st.text_input("Front (question)", key="fc_front_input")
+        back_in = st.text_area("Back (answer)", key="fc_back_input")
+        if st.button("Add card", key="fc_add_btn", type="primary"):
+            if front_in.strip() and back_in.strip():
+                flashcards.add_manual(user, front_in, back_in)
+                st.success("Card added.")
+                st.rerun()
+            else:
+                st.warning("Please fill in both fields.")
+
+
+# ============================================================
+# PAGE: QUIZ
+# ============================================================
+def page_quiz():
+    lang_, t_, s_, lg_ = L()
+    hero("🎯 " + s_.get("quiz", "Quiz"),
+         "Timed practice targeting your weakest misconceptions.")
+    ss.setdefault("quiz_qs", [])
+    ss.setdefault("quiz_i", 0)
+    ss.setdefault("quiz_score", 0)
+    ss.setdefault("quiz_started", 0.0)
+    ss.setdefault("quiz_seconds", 30)
+
+    if not ss.quiz_qs:
+        c1, c2 = st.columns(2)
+        n_q = c1.slider("Questions", 5, 20, 10, key="quiz_n")
+        secs = c2.slider("Seconds per question", 15, 120, 30, key="quiz_secs")
+        if st.button("▶️ Start quiz", type="primary", use_container_width=True):
+            ss.quiz_qs = quiz.build_quiz(user, n_questions=n_q)
+            ss.quiz_i = 0
+            ss.quiz_score = 0
+            ss.quiz_seconds = secs
+            ss.quiz_started = time.time()
+            st.rerun()
+
+        st.markdown("---")
+        st.markdown(f"**{s_.get('quiz_syllabus', 'Or upload a syllabus to generate a quiz:')}**")
+        up = st.file_uploader("Syllabus", type=["pdf", "txt"],
+                              key="quiz_syl_upload", label_visibility="collapsed")
+        if up is not None and st.button("📚 " + s_.get("quiz_build", "Build quiz from this file"),
+                                        type="primary", use_container_width=True,
+                                        key="quiz_build_btn"):
+            text_content = extract_uploaded_text(up)
+            if not text_content.strip():
+                st.warning("No text found in the file.")
+            else:
+                with st.spinner("Generating questions…"):
+                    try:
+                        qs = quiz.build_quiz_from_syllabus(text_content, n_questions=n_q)
+                    except Exception as e:
+                        st.error(f"Quiz generation failed: {e}")
+                        qs = []
+                if qs:
+                    ss.quiz_qs = qs
+                    ss.quiz_i = 0
+                    ss.quiz_score = 0
+                    ss.quiz_seconds = secs
+                    ss.quiz_started = time.time()
+                    st.rerun()
+                else:
+                    st.error("Could not generate questions. Check GOOGLE_API_KEY.")
+        return
+
+    total = len(ss.quiz_qs)
+
+    if ss.quiz_i >= total:
+        summary = quiz.score_summary(ss.quiz_score, total, 0)
+        st.subheader("Quiz complete!")
+        st.metric("Score", f"{ss.quiz_score}/{total}")
+        st.metric("Grade", summary["grade"])
+        if st.button("🔁 Play again", type="primary"):
+            ss.quiz_qs = []
+            st.rerun()
+        return
+
+    from streamlit_autorefresh import st_autorefresh
+    st_autorefresh(interval=1000, key=f"quiz_tick_{ss.quiz_i}")
+
+    q = ss.quiz_qs[ss.quiz_i]
+    elapsed = time.time() - ss.quiz_started
+    remaining = max(0, ss.quiz_seconds - elapsed)
+
+    st.progress(ss.quiz_i / total,
+                text=f"Question {ss.quiz_i + 1}/{total}")
+    c1, c2 = st.columns([3, 1])
+    c1.markdown(f"**Solve:** `{q['problem']}`")
+    c2.metric("Time left", f"{int(remaining)}s")
+
+    if remaining <= 0:
+        ss.quiz_i += 1
+        ss.quiz_started = time.time()
+        st.rerun()
+
+    with st.form(f"quiz_form_{ss.quiz_i}"):
+        ans = st.text_area("Write your working", key=f"quiz_ans_{ss.quiz_i}")
+        submitted = st.form_submit_button("✅ Submit answer", type="primary")
+
+    if submitted:
+        lines = [l.strip() for l in ans.splitlines() if l.strip()]
+        ok = quiz.check_answer(q, lines)
+        if ok:
+            ss.quiz_score += 1
+            st.success("✅ Correct")
+        else:
+            st.error("❌ Incorrect")
+        ss.quiz_i += 1
+        ss.quiz_started = time.time()
+        st.rerun()
+
+
+# ============================================================
+# PAGE: STUDY ROOMS
+# ============================================================
+def page_rooms():
+    lang_, t_, s_, lg_ = L()
+    hero("👥 Study rooms",
+         "Join a room with students your age who are studying the same topic.")
+
+    with st.container(border=True):
+        st.markdown('<div class="sec">➕ Create a room</div>', unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        topic = c1.text_input("Topic", key="room_topic",
+                              placeholder="e.g. Linear equations")
+        age_band = c2.selectbox("Age band",
+                                ["10-12", "13-15", "16-18", "18+"],
+                                key="room_age")
+        if st.button("Create room", type="primary", key="room_create"):
+            if topic.strip():
+                code = rooms.create_room(topic.strip(), age_band, user)
+                st.success(f"Room created. Share code: {code}")
+                st.rerun()
+            else:
+                st.warning("Please enter a topic.")
+
+    with st.container(border=True):
+        st.markdown('<div class="sec">🔗 Join a room by code</div>', unsafe_allow_html=True)
+        code_in = st.text_input("Room code", key="room_code", max_chars=6)
+        if st.button("Join", key="room_join"):
+            if code_in.strip():
+                ok = rooms.join_room(code_in, user)
+                if ok:
+                    st.success("Joined!")
+                    st.rerun()
+                else:
+                    st.error("Room not found.")
+
+    mine = rooms.my_rooms(user)
+    if mine:
+        st.markdown('<div class="sec">📌 My rooms</div>', unsafe_allow_html=True)
+        for code, topic, age_band, host in mine:
+            with st.container(border=True):
+                st.markdown(f"**{topic}** · {age_band} · host: `{host}` · code: `{code}`")
+                others = [m for m, _ in rooms.members_of(code) if m != user]
+                if others:
+                    st.caption("Also here: " + ", ".join(others))
+                else:
+                    st.caption("You are the only one here so far.")
+                if st.button("Leave room", key=f"leave_{code}"):
+                    rooms.leave_room(code, user)
+                    st.rerun()
+
+    st.markdown('<div class="sec">🌍 Open rooms</div>', unsafe_allow_html=True)
+    all_rooms = rooms.list_rooms()
+    if not all_rooms:
+        st.caption("No rooms yet. Create one above.")
+    else:
+        for code, topic, age_band, host, n in all_rooms:
+            with st.container(border=True):
+                c1, c2 = st.columns([3, 1])
+                c1.markdown(f"**{topic}** · {age_band}")
+                c1.caption(f"Host: {host} · {n} member(s) · code `{code}`")
+                if c2.button("Join", key=f"open_join_{code}"):
+                    rooms.join_room(code, user)
+                    st.rerun()
+
+
+# ============================================================
+# PAGE: GESTURES
 # ============================================================
 def page_gestures():
     lang_, t_, s_, lg_ = L()
@@ -644,7 +988,7 @@ def page_gestures():
 
 
 # ============================================================
-# PAGE: ACADEMIC PLANNER
+# PAGE: PLANNER
 # ============================================================
 def page_planner():
     lang_, t_, s_, lg_ = L()
@@ -656,45 +1000,130 @@ def page_planner():
             with st.form("add_task_form", clear_on_submit=True):
                 title = st.text_input(s_["task"])
                 subj = st.text_input(s_["subject"])
-                due_d = st.text_input(s_["due"])
+                due_d = st.date_input("Due date (optional)", value=None,
+                                      key="plan_due_date")
                 pri = st.selectbox(s_["priority"], ["normal", "high", "low"])
                 submitted = st.form_submit_button(s_["add"], type="primary",
                                                   use_container_width=True)
                 if submitted and title.strip():
-                    academic.add_task(user, title.strip(), subj, due_d, pri)
+                    due_str = due_d.strftime("%Y-%m-%d") if due_d else ""
+                    academic.add_task(user, title.strip(), subj, due_str, pri)
                     st.rerun()
+
+        with st.container(border=True):
+            st.markdown(f'<div class="sec">📚 {s_.get("plan_syllabus", "Generate a plan from your syllabus")}</div>',
+                        unsafe_allow_html=True)
+            plan_up = st.file_uploader(s_.get("plan_upload", "Upload syllabus (PDF or text)"),
+                                       type=["pdf", "txt"],
+                                       key="plan_syllabus",
+                                       label_visibility="collapsed")
+            days = st.number_input(s_.get("plan_days", "Days available"),
+                                   3, 90, 14, key="plan_days")
+            hrs = st.slider(s_.get("plan_hours", "Hours per day"),
+                            0.5, 6.0, 1.0, 0.5, key="plan_hrs")
+            if plan_up is not None and st.button(s_.get("plan_build", "Build my plan"),
+                                                 type="primary",
+                                                 use_container_width=True,
+                                                 key="plan_build"):
+                text_content = extract_uploaded_text(plan_up)
+                if not text_content.strip():
+                    st.warning("No text found in the file.")
+                else:
+                    with st.spinner("Building your plan…"):
+                        try:
+                            n = academic.generate_plan_from_syllabus(
+                                user, text_content, int(days), float(hrs)
+                            )
+                        except Exception as e:
+                            st.error(f"Plan generation failed: {e}")
+                            n = 0
+                    if n:
+                        st.success(f"Added {n} tasks to your planner.")
+                        st.rerun()
+                    else:
+                        st.error("Could not build the plan. Check GOOGLE_API_KEY.")
+
+        with st.container(border=True):
+            st.markdown('<div class="sec">📧 Daily email reminder</div>',
+                        unsafe_allow_html=True)
+            current_email = academic.get_reminder_email(user)
+            email_in = st.text_input("Your email", value=current_email, key="plan_email")
+            if st.button("Save email", use_container_width=True):
+                academic.set_reminder_email(user, email_in.strip())
+                st.success("Saved.")
+
     with c2:
         total, done_n = academic.stats(user)
         if total:
             st.progress(done_n / total, text=f"{done_n}/{total} {s_['of_done']}")
-        plan_rows = academic.list_tasks(user, only_open=False)
-        if not plan_rows:
+        tasks = academic.list_tasks(user, only_open=False)
+        if not tasks:
             st.caption(s_["no_tasks"])
-        for tid, ttitle, tsub, tdue, tpri, tdone in plan_rows:
-            meta = " · ".join(x for x in [tsub, tdue] if x)
-            meta_html = f"<small>{html.escape(meta)}</small>" if meta else ""
+        for tid, ttitle, tsub, tdue, tpri, tdone in tasks:
+            label, due_cls = academic.due_label(tdue)
+            meta = " · ".join(x for x in [tsub, label] if x)
             done_cls = "done" if tdone else ""
-            st.markdown(f'<div class="task {tpri} {done_cls}">'
-                        f'<span class="tt">{html.escape(ttitle)}</span>{meta_html}</div>',
+            st.markdown(f'<div class="task {tpri} {done_cls} {due_cls}">'
+                        f'<span class="tt">{html.escape(ttitle)}</span>'
+                        f'<small>{html.escape(meta)}</small></div>',
                         unsafe_allow_html=True)
-            b1, b2 = st.columns([4, 1])
+            b1, b2, b3 = st.columns([3, 1, 1])
             btn_label = ("↩︎ " + s_["undo"]) if tdone else ("✔ " + s_["done"])
             if b1.button(btn_label, key=f"td_{tid}", use_container_width=True):
                 academic.toggle_task(tid)
                 st.rerun()
-            if b2.button("🗑", key=f"tx_{tid}", use_container_width=True):
+            if b2.button("⏰", key=f"ts_{tid}", use_container_width=True):
+                academic.snooze_task(tid)
+                st.rerun()
+            if b3.button("🗑", key=f"tx_{tid}", use_container_width=True):
                 academic.delete_task(tid)
                 st.rerun()
 
 
 # ============================================================
-# PAGE: PRESENT
+# PAGE: TEACHER
 # ============================================================
-def page_present():
+def page_teacher():
+    try:
+        from app import teacher
+    except ImportError:
+        st.error("`app/teacher.py` not found.")
+        return
     lang_, t_, s_, lg_ = L()
-    hero("🎤 " + s_["present"], s_["present_sub"])
-    with st.container(border=True):
-        render_presenter()
+    hero("🏫 Teacher dashboard", "Aggregate misconception data across all students.")
+    students = history.all_users()
+    if not students:
+        st.info("No student data yet.")
+        return
+    st.markdown('<div class="sec">🔥 Top misconceptions</div>', unsafe_allow_html=True)
+    top = teacher.top_misconceptions(limit=10)
+    if top:
+        df = pd.DataFrame([{"Misconception": friendly(tag),
+                            "Total errors": total,
+                            "Students affected": students_n}
+                           for tag, total, students_n in top])
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    st.markdown('<div class="sec">⚠️ Students at risk</div>', unsafe_allow_html=True)
+    risk = teacher.students_at_risk(threshold=3)
+    if not risk:
+        st.success("No students are stuck at the same mistake 3+ times.")
+    else:
+        df2 = pd.DataFrame([{"Student": u, "Misconception": friendly(tag),
+                             "Errors": errors, "Box": box}
+                            for u, tag, errors, box in risk])
+        st.dataframe(df2, use_container_width=True, hide_index=True)
+    st.markdown('<div class="sec">📊 Class heatmap</div>', unsafe_allow_html=True)
+    heat = teacher.class_heatmap()
+    all_tags = sorted({tag for row in heat.values() for tag in row})
+    if all_tags:
+        matrix = [{"Student": st_, **{friendly(tag): heat[st_].get(tag, 0)
+                                       for tag in all_tags}} for st_ in sorted(heat)]
+        st.dataframe(pd.DataFrame(matrix), use_container_width=True, hide_index=True)
+        chart_df = pd.DataFrame(
+            {friendly(tag): [heat[st_].get(tag, 0) for st_ in sorted(heat)]
+             for tag in all_tags},
+            index=sorted(heat))
+        st.bar_chart(chart_df)
 
 
 # ============================================================
@@ -702,9 +1131,13 @@ def page_present():
 # ============================================================
 ROUTES = {
     "learn": page_learn,
+    "present": page_present,
     "progress": page_progress,
+    "flashcards": page_flashcards,
+    "quiz": page_quiz,
+    "rooms": page_rooms,
     "gestures": page_gestures,
     "planner": page_planner,
-    "present": page_present,
+    "teacher": page_teacher,
 }
 ROUTES.get(ss.page, page_learn)()

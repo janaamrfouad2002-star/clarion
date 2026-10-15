@@ -1,0 +1,82 @@
+[
+  {
+    "tag": "FORGOT_TO_DIVIDE",
+    "problem": "4x + 9 = 5"
+  },
+  {
+    "tag": "FORGOT_TO_DISTRIBUTE",
+    "problem": "3(x + 2) = -3"
+  },
+  {
+    "tag": "SIGN_ERROR_MOVING_TERM",
+    "problem": "4x + 6 = -18"
+  },
+  {
+    "tag": "FORGOT_TO_DISTRIBUTE",
+    "problem": "6(x + 4) = -18"
+  },
+  {
+    "tag": "FORGOT_TO_DISTRIBUTE",
+    "problem": "6(x + 6) = 78"
+  },
+  {
+    "tag": "MULTIPLIED_INSTEAD_OF_DIVIDED",
+    "problem": "5x + 8 = 28"
+  },
+  {
+    "tag": "SIGN_ERROR_MOVING_TERM",
+    "problem": "2x + 7 = -7"
+  },
+  {
+    "tag": "FORGOT_TO_DISTRIBUTE",
+    "problem": "4(x + 6) = 56"
+  },
+  {
+    "tag": "FORGOT_TO_DIVIDE",
+    "problem": "2x + 4 = 16"
+  },
+  {
+    "tag": "MULTIPLIED_INSTEAD_OF_DIVIDED",
+    "problem": "4x + 8 = -16"
+  },
+  {
+    "tag": "MULTIPLIED_INSTEAD_OF_DIVIDED",
+    "problem": "5x + 7 = 2"
+  },
+  {
+    "tag": "FORGOT_TO_DIVIDE",
+    "problem": "4x + 2 = 10"
+  },
+  {
+    "tag": "MULTIPLIED_INSTEAD_OF_DIVIDED",
+    "problem": "6x + 2 = 32"
+  },
+  {
+    "tag": "MULTIPLIED_INSTEAD_OF_DIVIDED",
+    "problem": "6x + 7 = -47"
+  },
+  {
+    "tag": "FORGOT_TO_DIVIDE",
+    "problem": "5x + 2 = -38"
+  },
+  {
+    "tag": "FORGOT_TO_DISTRIBUTE",
+    "problem": "3(x + 5) = 0"
+  },
+  {
+    "tag": "SIGN_ERROR_MOVING_TERM",
+    "problem": "6x + 2 = 2"
+  },
+  {
+    "tag": "SIGN_ERROR_MOVING_TERM",
+    "problem": "2x + 6 = 24"
+  },
+  {
+    "tag": "FORGOT_TO_DIVIDE",
+    "problem": "4x + 8 = 20"
+  },
+  {
+    "tag": "SIGN_ERROR_MOVING_TERM",
+    "problem": "6x + 7 = -47"
+  }
+]

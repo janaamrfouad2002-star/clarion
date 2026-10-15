@@ -209,8 +209,8 @@ def transcribe(audio_bytes: bytes, language_code=None):
         return "", None
     try:
         from groq import Groq
-        kwargs = dict(file=("question.wav", audio_bytes), model="whisper-large-v3-turbo",
-                      response_format="verbose_json")
+        kwargs = dict(file=("question.wav", audio_bytes), model="whisper-large-v3",
+                      response_format="verbose_json", temperature=0)
         if language_code:
             kwargs["language"] = language_code
         r = Groq(api_key=key).audio.transcriptions.create(**kwargs)

@@ -1,30 +1,40 @@
-"""engine.py - sends a structured problem to the right verifier module."""
+"""engine.py - routes a structured problem to the right verifier."""
 from typing import Literal
 
 from pydantic import BaseModel, Field
 from sympy import integrate, solve as sym_solve, sympify
 
-from app import calculus, core, science
+from app import calculus, core, science, shapes
+from app.core import diagnose_with_confidence
 
 core.EXPLANATIONS.update(calculus.EXPLANATIONS)
 core.EXPLANATIONS.update(science.EXPLANATIONS)
+core.EXPLANATIONS.update(shapes.GEOM_BUGS)
+core.EXPLANATIONS.update(shapes.TRIG_BUGS)
+core.EXPLANATIONS.update(shapes.STAT_BUGS)
 
 
 class Extracted(BaseModel):
     """What the LLM extracts from the student's text and/or photo."""
-    subject: Literal["algebra", "derivative", "integral",
-                     "chemistry_balance", "physics_calc", "other"] = "other"
-    steps: list[str] = Field(default_factory=list)   # algebra: every equation in order
-    expression: str = ""                             # the problem / function / equation
-    student_answer: str = ""                         # the student's answer, if any
+    subject: Literal[
+        "algebra", "derivative", "integral",
+        "chemistry_balance", "physics_calc",
+        "geometry", "trigonometry", "statistics",
+        "other",
+    ] = "other"
+    steps: list[str] = Field(default_factory=list)
+    expression: str = ""
+    student_answer: str = ""
+    shape_kind: str = ""
+    values: dict = Field(default_factory=dict)
 
 
 def solve_question(ex: Extracted) -> dict:
-    """No attempt given: software computes the correct answer."""
     if ex.subject == "derivative" and ex.expression.strip():
         f = calculus.parse(ex.expression)
         return {"status": "solved", "subject": "derivative",
-                "question": f"derivative of {ex.expression}", "answer": str(f.diff(core.x))}
+                "question": f"derivative of {ex.expression}",
+                "answer": str(f.diff(core.x))}
     if ex.subject == "integral" and ex.expression.strip():
         f = calculus.parse(ex.expression)
         return {"status": "solved", "subject": "integral",
@@ -35,8 +45,6 @@ def solve_question(ex: Extracted) -> dict:
         first_raw = ex.steps[0]
         first = first_raw.replace("^", "**")
         low = first_raw.lower()
-
-        # A natural-language derivative/integral question mislabeled as algebra
         if "derivative" in low or "differentiate" in low:
             expr = first_raw.lower().split("of", 1)[-1].strip(" ?.")
             try:
@@ -55,7 +63,6 @@ def solve_question(ex: Extracted) -> dict:
                         "answer": f"{integrate(f, core.x)} + C"}
             except Exception:
                 return {"status": "unsupported"}
-
         if "=" not in first:
             try:
                 val = sympify(first)
@@ -82,16 +89,15 @@ def solve_question(ex: Extracted) -> dict:
 
 def analyse(ex: Extracted) -> dict:
     if ex.subject == "algebra":
-        # Only treat as a *solution attempt* if there are at least 2 equations.
         steps = [s.replace("^", "**") for s in ex.steps if "=" in s]
         if len(steps) >= 2:
             i = core.first_wrong_step(steps)
             if i is None:
                 return {"status": "correct", "subject": "algebra"}
+            tag, conf = diagnose_with_confidence(steps[i - 1], steps[i])
             return {"status": "wrong", "subject": "algebra",
-                    "tag": core.diagnose(steps[i - 1], steps[i]),
+                    "tag": tag, "confidence": conf,
                     "prev": steps[i - 1], "wrong": steps[i]}
-        # Single line or no equations → a question, not an attempt.
         return solve_question(ex)
 
     if ex.subject in ("derivative", "integral"):
@@ -109,6 +115,27 @@ def analyse(ex: Extracted) -> dict:
             return science.check_calc(ex.expression, ex.student_answer)
         return solve_question(ex)
 
+    if ex.subject == "geometry":
+        if not ex.shape_kind:
+            return {"status": "unsupported"}
+        if ex.student_answer.strip():
+            return shapes.check_geometry(ex.shape_kind, ex.values, ex.student_answer)
+        return {"status": "unsupported"}
+
+    if ex.subject == "trigonometry":
+        if not ex.shape_kind:
+            return {"status": "unsupported"}
+        if ex.student_answer.strip():
+            return shapes.check_trig(ex.shape_kind, ex.values, ex.student_answer)
+        return {"status": "unsupported"}
+
+    if ex.subject == "statistics":
+        if not ex.shape_kind:
+            return {"status": "unsupported"}
+        if ex.student_answer.strip():
+            return shapes.check_stat(ex.shape_kind, ex.values, ex.student_answer)
+        return {"status": "unsupported"}
+
     return {"status": "unsupported"}
 
 
@@ -119,6 +146,12 @@ def make_twin(subject: str, tag: str) -> str:
         return science.make_chem_twin()
     if subject == "physics_calc":
         return science.make_phys_twin()
+    if subject == "geometry":
+        return shapes.make_geom_twin(tag)
+    if subject == "trigonometry":
+        return shapes.make_trig_twin(tag)
+    if subject == "statistics":
+        return shapes.make_stat_twin(tag)
     return calculus.make_problem(subject, tag)
 
 
@@ -131,4 +164,6 @@ def check_twin(subject: str, problem: str, student_text: str) -> bool:
         return science.check_chem_twin(problem, student_text)
     if subject == "physics_calc":
         return science.check_calc(problem, student_text)["status"] == "correct"
+    if subject in ("geometry", "trigonometry", "statistics"):
+        return False
     return calculus.check(subject, problem, student_text)["status"] == "correct"

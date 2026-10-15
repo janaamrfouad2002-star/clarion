@@ -1,17 +1,18 @@
-"""presenter.py - live presentation bot: talk, answer, translate."""
+"""presenter.py - live presenter bot: talk, answer, translate."""
 from dotenv import load_dotenv
 from app.llm import _get_model, _text
 from app.extras import transcribe, speak, detect_language
 
 load_dotenv()
 
-# Full language name -> gTTS code. This is the ONLY place we map it now.
+
 LANG_TO_GTTS = {
     "English": "en",
     "Hindi": "hi",
     "Arabic": "ar",
     "French": "fr",
 }
+
 
 SCRIPT = {
     "English": {
@@ -98,7 +99,11 @@ def translate(text: str, target_lang: str) -> str:
     try:
         from langchain_core.messages import HumanMessage, SystemMessage
         msgs = [
-            SystemMessage(content=f"Translate into {target_lang}. Keep maths and numbers unchanged. Reply with translation only."),
+            SystemMessage(content=(
+                f"Translate the following into {target_lang}. "
+                "Keep maths, numbers and backticked text unchanged. "
+                "Reply with the translation only."
+            )),
             HumanMessage(content=text),
         ]
         return _text(model.invoke(msgs)).strip() or text
@@ -107,11 +112,28 @@ def translate(text: str, target_lang: str) -> str:
         return text
 
 
+# ------------------------------------------------------------
+# Broad, honest presenter prompt
+# ------------------------------------------------------------
 PRESENTER_SYSTEM = (
-    "You are a friendly presenter bot for a school project called Mistake-to-Mastery. "
-    "Answer the audience's question in 2 to 4 short sentences. "
-    "Explain the project, its features, or the maths behind the demo. "
-    "Be warm, confident and concise. Always reply in {lang}."
+    "You are a friendly presenter bot at a live demo of a school project "
+    "called Mistake-to-Mastery (an AI tutor that finds the exact step where a "
+    "student went wrong). The audience may ask you ANY question — about the "
+    "project, about maths, about other subjects, or about general knowledge. "
+
+    "RULES: "
+    "1. Answer the question directly, in 2 to 5 short sentences. "
+    "2. If the question is about the project, explain it warmly. "
+    "3. If the question is about maths, physics, chemistry or programming, "
+    "give a short, correct answer. "
+    "4. If the question is about history, religion, people, art, or anything "
+    "outside school subjects, answer factually and briefly. "
+    "NEVER invent facts. If you are unsure, say so plainly: 'I'm not sure about that.' "
+    "5. Do NOT steer every question back to the Mistake-to-Mastery project — only "
+    "mention it if the user asks about it, or if the question is about studying "
+    "in general. "
+    "6. Always reply in {lang}. If the user mixes languages, reply in {lang}. "
+    "Do not use markdown headings. Keep it conversational."
 )
 
 
@@ -121,9 +143,11 @@ def respond(text: str, lang: str = "English", context: str = "") -> str:
         return _t(lang)["not_understood"]
     try:
         from langchain_core.messages import HumanMessage, SystemMessage
-        user = text if not context else f"Context:\n{context}\n\nQuestion: {text}"
-        reply = _text(model.invoke([SystemMessage(content=PRESENTER_SYSTEM.format(lang=lang)),
-                                    HumanMessage(content=user)]))
+        user_msg = text if not context else f"Context:\n{context}\n\nQuestion: {text}"
+        reply = _text(model.invoke([
+            SystemMessage(content=PRESENTER_SYSTEM.format(lang=lang)),
+            HumanMessage(content=user_msg),
+        ]))
         return reply.strip() or _t(lang)["not_understood"]
     except Exception as e:
         print("RESPOND ERROR:", e)
@@ -135,10 +159,5 @@ def listen(audio_bytes: bytes, language_code=None):
 
 
 def say(text: str, lang: str = "English"):
-    """Generate speech. Prints the code it's using so you can verify in the terminal."""
     code = LANG_TO_GTTS.get(lang, "en")
-    print(f"[presenter.say] lang={lang!r} -> gTTS code={code!r} text={text[:40]!r}")
-    mp3 = speak(text, code)
-    if mp3 is None:
-        print(f"[presenter.say] speak() returned None for code={code!r}")
-    return mp3
+    return speak(text, code)
