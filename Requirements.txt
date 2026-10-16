@@ -1,0 +1,17 @@
+streamlit
+sympy
+pint
+python-dotenv
+langchain-core
+langchain-google-genai
+langchain-groq
+groq
+gtts
+streamlit-autorefresh
+streamlit-mic-recorder
+reportlab
+pandas
+scipy
+opencv-python-headless
+PyPDF2
+starlette<1.4.0

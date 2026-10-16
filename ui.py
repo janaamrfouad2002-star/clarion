@@ -6,7 +6,8 @@ import time
 import pandas as pd
 import streamlit as st
 
-from app import academic, auth, history, flashcards, quiz, rooms
+from app import (academic, auth, history, flashcards, quiz, rooms, roles,
+                 answers, progress_report, adaptive)
 from app.core import record, due, mistake_map
 from app.engine import analyse, make_twin, check_twin
 from app.extras import (LANGS, AUTO, CODE, T, GESTURE_REPLY, detect_language,
@@ -92,6 +93,29 @@ div.stButton > button[kind="primary"], div.stFormSubmitButton > button[kind="pri
 [data-testid="stFileUploader"] section { padding: 4px 8px !important; min-height: 40px !important; }
 [data-testid="stFileUploader"] small { display:none !important; }
 [data-testid="stFileUploader"] label { display:none !important; }
+
+.teacher-badge { display:inline-block; background:linear-gradient(90deg,#6366f1,#a855f7);
+  color:#fff; padding:2px 10px; border-radius:999px; font-size:.72rem; font-weight:700;
+  margin-left:6px; }
+
+/* ---- Onboarding cards ---- */
+.tour-card { background:#fff; border:1px solid var(--line); border-radius:18px;
+  padding:22px 26px; margin-bottom:14px; box-shadow:0 12px 30px -22px rgba(15,23,42,.3);
+  animation: fadeUp .35s ease both; }
+.tour-card h3 { margin:0 0 6px; color:#4f46e5; }
+.tour-card p  { margin:0; color:#334155; }
+@keyframes fadeUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+
+/* ---- Streak chip ---- */
+.streak { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:12px;
+  background:linear-gradient(90deg,#fef3c7,#fde68a); border:1px solid #fbbf24;
+  font-weight:700; color:#78350f; margin-bottom:10px; }
+
+/* ---- Solution board post ---- */
+.post { border:1px solid var(--line); border-radius:14px; padding:12px 14px;
+  background:#fff; margin-bottom:8px; }
+.post .meta { color:var(--muted); font-size:.78rem; margin-bottom:4px; }
+.post .body { white-space:pre-wrap; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -271,6 +295,7 @@ ss.setdefault("page", "learn")
 ss.setdefault("user", None)
 ss.setdefault("fails", 0)
 ss.setdefault("locked_until", 0.0)
+ss.setdefault("tour_step", 0)          # onboarding: 0 = not started, 1..4 = steps, 5 = done
 
 LANG_OPTIONS = [AUTO] + list(LANGS)
 
@@ -304,14 +329,12 @@ def lang_picker(key: str):
         st.rerun()
 
 
-# ---------- Safe file reader (import inside function, wrapped in try) ----------
 def extract_uploaded_text(upload):
-    """Return the text of an uploaded .txt or .pdf. Returns '' if anything fails."""
     if upload is None:
         return ""
     try:
         if upload.type == "application/pdf":
-            import PyPDF2  # local import, no top-level dependency
+            import PyPDF2
             reader = PyPDF2.PdfReader(upload)
             return "\n".join((p.extract_text() or "") for p in reader.pages)
         return upload.read().decode("utf-8", errors="ignore")
@@ -395,13 +418,26 @@ lang, t, s, lg = L()
 # ============================================================
 # SIDEBAR
 # ============================================================
+current_role = roles.get_role(user)
+counts = history.counts(user)
+today_total = counts["right"] + counts["wrong"]
+
 with st.sidebar:
+    badge = '<span class="teacher-badge">TEACHER</span>' if current_role == "teacher" else ""
     st.markdown(
         f'<div class="usercard"><div class="avatar">{html.escape(user[0].upper())}</div>'
-        f'<div><b>{lg["hello"]}, {html.escape(user)}</b></div></div>',
+        f'<div><b>{lg["hello"]}, {html.escape(user)}</b>{badge}</div></div>',
         unsafe_allow_html=True)
+
+    # Streak chip
+    goal = 10
+    st.markdown(
+        f'<div class="streak">🔥 Today: {today_total}/{goal}</div>',
+        unsafe_allow_html=True)
+
     lang_picker("lp_side")
     st.markdown("---")
+
     PAGES = [("learn", "💬", s["learn"]),
              ("present", "🎤", s["present"]),
              ("progress", "📊", s["tracking"]),
@@ -409,20 +445,36 @@ with st.sidebar:
              ("quiz", "🎯", s.get("quiz", "Quiz")),
              ("rooms", "👥", s.get("rooms", "Study rooms")),
              ("gestures", "🎥", s["gestures"]),
-             ("planner", "📅", s["planner"]),
-             ("teacher", "🏫", s.get("teacher", "Teacher"))]
+             ("planner", "📅", s["planner"])]
+    if current_role == "teacher":
+        PAGES.append(("teacher", "🏫", s.get("teacher", "Teacher")))
+
     for key, icon, label in PAGES:
         kind = "primary" if ss.page == key else "secondary"
-        if st.button(f"{icon}  {label}", key=f"nav_{key}", use_container_width=True, type=kind):
+        if st.button(f"{icon}  {label}", key=f"nav_{key}",
+                     use_container_width=True, type=kind):
             ss.page = key
             st.rerun()
+
     st.markdown("---")
+
+    if current_role != "teacher":
+        with st.expander("👩‍🏫 I am a teacher"):
+            st.caption("Enter your teacher code to unlock class-wide tools.")
+            code_in = st.text_input("Teacher code", type="password", key="teacher_code")
+            if st.button("Unlock teacher tools", key="unlock_teacher",
+                         use_container_width=True):
+                if roles.try_promote(user, code_in):
+                    st.success("Teacher tools unlocked.")
+                    st.rerun()
+                else:
+                    st.error("Incorrect code.")
 
     if user.startswith("guest-"):
         st.caption(lg["guest_note"])
     if st.button("🚪 " + lg["logout"], use_container_width=True, key="logout"):
         for k in ("user", "chat", "twin", "inbox", "last_gesture",
-                  "quiz_qs", "quiz_i", "quiz_score", "quiz_started"):
+                  "quiz_qs", "quiz_i", "quiz_score", "quiz_started", "tour_step"):
             ss.pop(k, None)
         ss.page = "learn"
         st.rerun()
@@ -502,9 +554,45 @@ def apply_gesture(name: str):
 
 
 # ============================================================
+# ONBOARDING TOUR
+# ============================================================
+def page_tour():
+    hero("👋 Welcome to Lumen", "A 30-second tour before you start.")
+    steps = [
+        ("1. Type your working",
+         "In the box at the bottom of the Learn page, type your steps — one "
+         "equation per line. Or speak, or upload a photo of your notebook."),
+        ("2. We find the mistake",
+         "Lumen compares each line to the previous one, finds the first line "
+         "that changed the answer, and names the misconception behind it."),
+        ("3. Practice on a twin problem",
+         "After every mistake you get a fresh problem with the same structure "
+         "but new numbers. Solving it confirms you've fixed the error."),
+        ("4. Every mistake becomes a flashcard",
+         "The Flashcards page collects every error you've made into cards you "
+         "can review. The learner model schedules them for spaced repetition."),
+    ]
+    for title, body in steps:
+        st.markdown(
+            f'<div class="tour-card"><h3>{title}</h3><p>{body}</p></div>',
+            unsafe_allow_html=True)
+
+    if st.button("🚀 Start learning", type="primary", use_container_width=True):
+        ss.tour_step = 5
+        ss.page = "learn"
+        st.rerun()
+
+
+# ============================================================
 # PAGE: LEARN
 # ============================================================
 def page_learn():
+    # First-visit onboarding
+    if ss.get("tour_step", 0) == 0:
+        ss.tour_step = 1
+        ss.page = "tour"
+        st.rerun()
+
     lang_, t_, s_, lg_ = L()
     hero("💡 Lumen", t_["tagline"],
          ["🧠 Verified mistakes", "🗣️ 4 languages", "📇 Flashcards", "🎯 Quiz", "📅 Planner"])
@@ -604,8 +692,9 @@ def page_learn():
                     say("assistant", reply)
                     log("asked", result["question"])
                 elif status == "unsupported":
+                    # General answer — clearly labelled as not verified
                     with st.spinner("..."):
-                        reply = answer_question(text, img, mime, lang_) or t_["sorry"]
+                        reply = answers.general_answer(text, img, mime, lang_)
                     say("assistant", reply)
                     log("asked", text or "📷")
                 else:
@@ -624,10 +713,14 @@ def page_learn():
                         f"{t_['your_line']}: `{result['wrong']}`\n\n{hint}")
                     record(user, tag_raw.rstrip("?"), correct=False)
                     log("wrong", result["wrong"], tag_raw.rstrip("?"))
+                    clean_tag = tag_raw.rstrip("?")
+                    # Adaptive difficulty for the twin
+                    difficulty = adaptive.pick_difficulty(user, clean_tag)
+                    problem = adaptive.make_problem(clean_tag, difficulty)
                     ss["twin"] = {"subject": result["subject"],
-                                  "tag": tag_raw.rstrip("?"),
-                                  "problem": make_twin(result["subject"],
-                                                        tag_raw.rstrip("?"))}
+                                  "tag": clean_tag,
+                                  "problem": problem,
+                                  "difficulty": difficulty}
             if ss.ui_lang != start_lang:
                 st.rerun()
 
@@ -640,11 +733,21 @@ def page_learn():
         else:
             st.warning(t_["no_audio"])
 
+    # "Explain more simply" button for the last hint
+    if last_reply:
+        if st.button("💡 Explain this to me more simply", key="explain_more"):
+            with st.spinner("..."):
+                simpler = simplify(last_reply, lang_) or t_["sorry"]
+            say("assistant", simpler)
+
     tw = ss.get("twin")
     if tw:
         task, label = t_["tasks"].get(tw["subject"], ("Solve", "Your answer"))
+        diff = tw.get("difficulty", "medium")
+        diff_badge = {"easy": "🟢 Easy", "medium": "🟡 Medium", "hard": "🔴 Hard"}.get(diff, "")
         with st.container(border=True):
-            st.markdown(f'<div class="sec">🧩 {t_["try_similar"]}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="sec">🧩 {t_["try_similar"]} {diff_badge}</div>',
+                        unsafe_allow_html=True)
             st.write(f"**{task}**")
             st.code(tw["problem"])
             ans = st.text_area(label, key="twin_ans")
@@ -656,6 +759,8 @@ def page_learn():
                     st.stop()
                 record(user, tw["tag"], correct=ok)
                 log("right" if ok else "wrong", tw["problem"], tw["tag"])
+                # Update the adaptive streak
+                adaptive.record_attempt(user, tw["tag"], ok)
                 if ok:
                     st.success(t_["fixed"])
                     st.balloons()
@@ -690,6 +795,17 @@ def page_progress():
       <div class="stat mid"><b>{n_master}</b><span>{s_["mastered"]}</span></div>
       <div class="stat mid"><b>{acc}</b><span>{s_["accuracy"]}</span></div></div>""",
                 unsafe_allow_html=True)
+
+    # Export PDF
+    if st.button("📄 Download my progress report (PDF)", key="dl_pdf"):
+        try:
+            pdf_bytes = progress_report.build_pdf(user)
+            st.download_button("💾 Save PDF", data=pdf_bytes,
+                               file_name=f"lumen_progress_{user}.pdf",
+                               mime="application/pdf",
+                               key="save_pdf")
+        except Exception as e:
+            st.error(f"Could not generate PDF: {e}")
 
     left, right = st.columns([3, 2])
     with left:
@@ -893,12 +1009,12 @@ def page_quiz():
 
 
 # ============================================================
-# PAGE: STUDY ROOMS
+# PAGE: STUDY ROOMS  (with solution board)
 # ============================================================
 def page_rooms():
     lang_, t_, s_, lg_ = L()
     hero("👥 Study rooms",
-         "Join a room with students your age who are studying the same topic.")
+         "Join a room, share your solutions, upvote the best ones.")
 
     with st.container(border=True):
         st.markdown('<div class="sec">➕ Create a room</div>', unsafe_allow_html=True)
@@ -939,6 +1055,39 @@ def page_rooms():
                     st.caption("Also here: " + ", ".join(others))
                 else:
                     st.caption("You are the only one here so far.")
+
+                # ---- Solution board ----
+                st.markdown('<div class="sec">💬 Solution board</div>',
+                            unsafe_allow_html=True)
+                new_post = st.text_area(
+                    "Post a solution, a question, or a tip",
+                    key=f"post_body_{code}",
+                    height=100,
+                )
+                if st.button("📤 Post", key=f"post_btn_{code}", type="primary"):
+                    if new_post.strip():
+                        rooms.post_solution(code, user, new_post)
+                        st.rerun()
+
+                posts = rooms.list_posts(code, limit=20)
+                if not posts:
+                    st.caption("No posts yet. Be the first to share.")
+                else:
+                    for pid, puser, body, votes, created in posts:
+                        st.markdown(
+                            f'<div class="post"><div class="meta">{html.escape(puser)}'
+                            f' · {votes} ⬆</div>'
+                            f'<div class="body">{html.escape(body)}</div></div>',
+                            unsafe_allow_html=True)
+                        bc1, bc2 = st.columns([1, 5])
+                        if bc1.button("⬆ Upvote", key=f"vote_{pid}"):
+                            if rooms.vote_post(pid, user):
+                                st.rerun()
+                        if puser == user:
+                            if bc2.button("🗑 Delete", key=f"del_{pid}"):
+                                rooms.delete_post(pid, user)
+                                st.rerun()
+
                 if st.button("Leave room", key=f"leave_{code}"):
                     rooms.leave_room(code, user)
                     st.rerun()
@@ -1081,11 +1230,16 @@ def page_planner():
 
 
 # ============================================================
-# PAGE: TEACHER
+# PAGE: TEACHER  (teacher-only)
 # ============================================================
 def page_teacher():
+    if roles.get_role(user) != "teacher":
+        st.error("This page is for teachers only. "
+                 "Enter the teacher code in the sidebar to unlock it.")
+        return
+
     try:
-        from app import teacher
+        from app import teacher as teacher_mod
     except ImportError:
         st.error("`app/teacher.py` not found.")
         return
@@ -1096,7 +1250,7 @@ def page_teacher():
         st.info("No student data yet.")
         return
     st.markdown('<div class="sec">🔥 Top misconceptions</div>', unsafe_allow_html=True)
-    top = teacher.top_misconceptions(limit=10)
+    top = teacher_mod.top_misconceptions(limit=10)
     if top:
         df = pd.DataFrame([{"Misconception": friendly(tag),
                             "Total errors": total,
@@ -1104,7 +1258,7 @@ def page_teacher():
                            for tag, total, students_n in top])
         st.dataframe(df, use_container_width=True, hide_index=True)
     st.markdown('<div class="sec">⚠️ Students at risk</div>', unsafe_allow_html=True)
-    risk = teacher.students_at_risk(threshold=3)
+    risk = teacher_mod.students_at_risk(threshold=3)
     if not risk:
         st.success("No students are stuck at the same mistake 3+ times.")
     else:
@@ -1113,7 +1267,7 @@ def page_teacher():
                             for u, tag, errors, box in risk])
         st.dataframe(df2, use_container_width=True, hide_index=True)
     st.markdown('<div class="sec">📊 Class heatmap</div>', unsafe_allow_html=True)
-    heat = teacher.class_heatmap()
+    heat = teacher_mod.class_heatmap()
     all_tags = sorted({tag for row in heat.values() for tag in row})
     if all_tags:
         matrix = [{"Student": st_, **{friendly(tag): heat[st_].get(tag, 0)
@@ -1130,6 +1284,7 @@ def page_teacher():
 # ROUTER
 # ============================================================
 ROUTES = {
+    "tour": page_tour,
     "learn": page_learn,
     "present": page_present,
     "progress": page_progress,
