@@ -16,7 +16,10 @@ from app.llm import (extract, explain_with_llm, explain_solution, answer_questio
                      simplify, translate_text)
 from app.presenter_ui import render as render_presenter
 
-st.set_page_config(page_title="Lumen", page_icon="💡",
+# ============================================================
+# 1. NAME CHANGED HERE
+# ============================================================
+st.set_page_config(page_title="Mistake to Mastery", page_icon="🎓",
                    layout="wide", initial_sidebar_state="expanded")
 
 # ============================================================
@@ -98,7 +101,6 @@ div.stButton > button[kind="primary"], div.stFormSubmitButton > button[kind="pri
   color:#fff; padding:2px 10px; border-radius:999px; font-size:.72rem; font-weight:700;
   margin-left:6px; }
 
-/* ---- Onboarding cards ---- */
 .tour-card { background:#fff; border:1px solid var(--line); border-radius:18px;
   padding:22px 26px; margin-bottom:14px; box-shadow:0 12px 30px -22px rgba(15,23,42,.3);
   animation: fadeUp .35s ease both; }
@@ -106,12 +108,10 @@ div.stButton > button[kind="primary"], div.stFormSubmitButton > button[kind="pri
 .tour-card p  { margin:0; color:#334155; }
 @keyframes fadeUp { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
 
-/* ---- Streak chip ---- */
 .streak { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:12px;
   background:linear-gradient(90deg,#fef3c7,#fde68a); border:1px solid #fbbf24;
   font-weight:700; color:#78350f; margin-bottom:10px; }
 
-/* ---- Solution board post ---- */
 .post { border:1px solid var(--line); border-radius:14px; padding:12px 14px;
   background:#fff; margin-bottom:8px; }
 .post .meta { color:var(--muted); font-size:.78rem; margin-bottom:4px; }
@@ -295,7 +295,7 @@ ss.setdefault("page", "learn")
 ss.setdefault("user", None)
 ss.setdefault("fails", 0)
 ss.setdefault("locked_until", 0.0)
-ss.setdefault("tour_step", 0)          # onboarding: 0 = not started, 1..4 = steps, 5 = done
+ss.setdefault("tour_step", 0)
 
 LANG_OPTIONS = [AUTO] + list(LANGS)
 
@@ -355,7 +355,10 @@ def login_page():
     lang, t, s, lg = L()
     st.markdown("<style>[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl'],"
                 "[data-testid='collapsedControl']{display:none}</style>", unsafe_allow_html=True)
-    hero("💡 Lumen", t["tagline"],
+    # ============================================================
+    # 2. NAME CHANGED HERE
+    # ============================================================
+    hero("🎓 Mistake to Mastery", t["tagline"],
          ["🧠 Verified mistakes", "🗣️ 4 languages", "🎥 Gestures", "🎤 Voice", "📅 Planner"])
     _, mid, _ = st.columns([1, 1.6, 1])
     with mid:
@@ -429,7 +432,6 @@ with st.sidebar:
         f'<div><b>{lg["hello"]}, {html.escape(user)}</b>{badge}</div></div>',
         unsafe_allow_html=True)
 
-    # Streak chip
     goal = 10
     st.markdown(
         f'<div class="streak">🔥 Today: {today_total}/{goal}</div>',
@@ -480,7 +482,7 @@ with st.sidebar:
         st.rerun()
 
 # ============================================================
-# BOTTOM CHAT BAR — only on Learn
+# BOTTOM CHAT BAR
 # ============================================================
 AUDIO_IN_BAR = True
 prompt = None
@@ -557,13 +559,13 @@ def apply_gesture(name: str):
 # ONBOARDING TOUR
 # ============================================================
 def page_tour():
-    hero("👋 Welcome to Lumen", "A 30-second tour before you start.")
+    hero("👋 Welcome to Mistake to Mastery", "A 30-second tour before you start.")
     steps = [
         ("1. Type your working",
          "In the box at the bottom of the Learn page, type your steps — one "
          "equation per line. Or speak, or upload a photo of your notebook."),
         ("2. We find the mistake",
-         "Lumen compares each line to the previous one, finds the first line "
+         "Mistake to Mastery compares each line to the previous one, finds the first line "
          "that changed the answer, and names the misconception behind it."),
         ("3. Practice on a twin problem",
          "After every mistake you get a fresh problem with the same structure "
@@ -587,14 +589,16 @@ def page_tour():
 # PAGE: LEARN
 # ============================================================
 def page_learn():
-    # First-visit onboarding
     if ss.get("tour_step", 0) == 0:
         ss.tour_step = 1
         ss.page = "tour"
         st.rerun()
 
     lang_, t_, s_, lg_ = L()
-    hero("💡 Lumen", t_["tagline"],
+    # ============================================================
+    # 3. NAME CHANGED HERE
+    # ============================================================
+    hero("🎓 Mistake to Mastery", t_["tagline"],
          ["🧠 Verified mistakes", "🗣️ 4 languages", "📇 Flashcards", "🎯 Quiz", "📅 Planner"])
     if ss.chat and st.button("🗑️ " + t_["clear"], key="clear_chat"):
         ss.chat = []
@@ -692,7 +696,6 @@ def page_learn():
                     say("assistant", reply)
                     log("asked", result["question"])
                 elif status == "unsupported":
-                    # General answer — clearly labelled as not verified
                     with st.spinner("..."):
                         reply = answers.general_answer(text, img, mime, lang_)
                     say("assistant", reply)
@@ -714,7 +717,6 @@ def page_learn():
                     record(user, tag_raw.rstrip("?"), correct=False)
                     log("wrong", result["wrong"], tag_raw.rstrip("?"))
                     clean_tag = tag_raw.rstrip("?")
-                    # Adaptive difficulty for the twin
                     difficulty = adaptive.pick_difficulty(user, clean_tag)
                     problem = adaptive.make_problem(clean_tag, difficulty)
                     ss["twin"] = {"subject": result["subject"],
@@ -733,7 +735,6 @@ def page_learn():
         else:
             st.warning(t_["no_audio"])
 
-    # "Explain more simply" button for the last hint
     if last_reply:
         if st.button("💡 Explain this to me more simply", key="explain_more"):
             with st.spinner("..."):
@@ -759,7 +760,6 @@ def page_learn():
                     st.stop()
                 record(user, tw["tag"], correct=ok)
                 log("right" if ok else "wrong", tw["problem"], tw["tag"])
-                # Update the adaptive streak
                 adaptive.record_attempt(user, tw["tag"], ok)
                 if ok:
                     st.success(t_["fixed"])
@@ -796,12 +796,11 @@ def page_progress():
       <div class="stat mid"><b>{acc}</b><span>{s_["accuracy"]}</span></div></div>""",
                 unsafe_allow_html=True)
 
-    # Export PDF
     if st.button("📄 Download my progress report (PDF)", key="dl_pdf"):
         try:
             pdf_bytes = progress_report.build_pdf(user)
             st.download_button("💾 Save PDF", data=pdf_bytes,
-                               file_name=f"lumen_progress_{user}.pdf",
+                               file_name=f"progress_report_{user}.pdf",
                                mime="application/pdf",
                                key="save_pdf")
         except Exception as e:
@@ -1009,7 +1008,7 @@ def page_quiz():
 
 
 # ============================================================
-# PAGE: STUDY ROOMS  (with solution board)
+# PAGE: STUDY ROOMS
 # ============================================================
 def page_rooms():
     lang_, t_, s_, lg_ = L()
@@ -1056,7 +1055,6 @@ def page_rooms():
                 else:
                     st.caption("You are the only one here so far.")
 
-                # ---- Solution board ----
                 st.markdown('<div class="sec">💬 Solution board</div>',
                             unsafe_allow_html=True)
                 new_post = st.text_area(
@@ -1230,7 +1228,7 @@ def page_planner():
 
 
 # ============================================================
-# PAGE: TEACHER  (teacher-only)
+# PAGE: TEACHER
 # ============================================================
 def page_teacher():
     if roles.get_role(user) != "teacher":
