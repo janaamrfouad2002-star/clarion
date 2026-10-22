@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from app import (academic, auth, history, flashcards, quiz, rooms, roles,
-                 answers, progress_report, adaptive)
+                 progress_report, adaptive)
 from app.core import record, due, mistake_map
 from app.engine import analyse, make_twin, check_twin
 from app.extras import (LANGS, AUTO, CODE, T, GESTURE_REPLY, detect_language,
@@ -688,7 +688,7 @@ def page_learn():
                     log("asked", result["question"])
                 elif status == "unsupported":
                     with st.spinner("..."):
-                        reply = answers.general_answer(text, img, mime, lang_)
+                        reply = answer_question(text, img, mime, lang_) or t_["sorry"]
                     say("assistant", reply)
                     log("asked", text or "📷")
                 else:
