@@ -1,11 +1,12 @@
-"""presenter_ui.py - presenter bot with translate mode."""
+"""presenter_ui.py - presenter bot with language mode, better mic, and stop audio."""
 import hashlib
 import re
+import time
 
 import streamlit as st
 
 from app import presenter
-from app.extras import detect_language
+from app.extras import LANGS, detect_language
 from app.avatar import render_presenter_avatar
 
 
@@ -159,11 +160,19 @@ def render():
                                 autoplay=ss.presenter_autoplay)
         ss.presenter_autoplay = False
 
+        # ----- Stop audio button -----
+        if ss.presenter_mp3:
+            if st.button("🛑 Stop Speaking", key="stop_presenter_audio", use_container_width=True):
+                ss.presenter_mp3 = None
+                st.rerun()
+
     with right:
         c1, c2, c3 = st.columns(3)
         with c1:
             if st.button("▶️ Start", use_container_width=True):
-                _say("assistant", presenter.intro(ss.presenter_lang), speak_it=True)
+                _say("assistant",
+                     presenter.intro(ss.get("presenter_reply_lang") or ss.presenter_lang),
+                     speak_it=True)
                 _say("assistant", presenter.demo_offer(ss.presenter_lang))
         with c2:
             if st.button("📜 Pitch", use_container_width=True):
@@ -188,28 +197,35 @@ def render():
     for m in ss.presenter_chat:
         _render_msg(m)
 
-    # ---------- voice input: back to the simple st.audio_input ----------
+    # ---------- Upgraded Mic ----------
     with st.expander("🎙️ Speak to the presenter", expanded=True):
-        audio = st.audio_input(
-            "Record your question",
-            key=f"presenter_audio_{ss.presenter_mic_nonce}",
-            label_visibility="collapsed",
-        )
-        if audio is not None:
-            data = audio.getvalue()
+        try:
+            from streamlit_mic_recorder import mic_recorder
+            audio = mic_recorder(
+                start_prompt="🎙️ Click to record",
+                stop_prompt="⏹️ Click to stop",
+                just_once=True,
+                use_container_width=True,
+                key=f"presenter_mic_{ss.presenter_mic_nonce}",
+            )
+        except Exception:
+            st.caption("Install `streamlit-mic-recorder` to enable voice input.")
+            audio = None
+
+        if audio and isinstance(audio, dict) and audio.get("bytes"):
+            data = audio["bytes"]
             h = hashlib.md5(data).hexdigest()
             if ss.last_presenter_audio != h:
                 ss.last_presenter_audio = h
-                with st.spinner("Transcribing…"):
+                with st.spinner("Transcribing… (Speaking clearly helps!)"):
                     text, detected = presenter.listen(data, None)
                 if not text:
-                    st.warning("I couldn't hear that. Try again.")
+                    st.warning("I couldn't hear that. Try speaking closer to the mic or in a quieter room.")
                 else:
-                    ss.presenter_mic_nonce += 1
+                    ss.mic_nonce += 1
                     _handle_turn(text, detected, speak_it=True)
                     st.rerun()
 
-    # ---------- typed input inside the presenter ----------
     text = st.chat_input("Ask the presenter, or say 'reply in Hindi'…",
                          key="presenter_input")
     if text:
