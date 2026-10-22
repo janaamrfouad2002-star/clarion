@@ -1,4 +1,4 @@
-"""quiz.py - timed quiz with auto-generated questions from weak misconceptions."""
+"""quiz.py - timed quiz with auto-generated questions from weak misconceptions or syllabus."""
 import random
 import time
 
@@ -36,6 +36,57 @@ def build_quiz(user: str, n_questions: int = 10) -> list[dict]:
     return questions
 
 
+def build_quiz_from_syllabus(syllabus_text: str, n_questions: int = 10) -> list[dict]:
+    """Generate quiz questions STRICTLY from the syllabus text."""
+    from app.llm import _get_model, _text
+    from langchain_core.messages import HumanMessage, SystemMessage
+    import json
+
+    model = _get_model()
+    if model is None:
+        return []
+
+    sys = (
+        "You are a strict exam generator. Your ONLY job is to create questions based "
+        "exactly on the provided text. Do not use outside knowledge. "
+        f"Generate {n_questions} math/algebra problems that test the specific topics in the text. "
+        "Return ONLY a valid JSON array. Each item must be exactly this format: "
+        '[{"problem": "2x + 3 = 11", "answer": "x = 4", "topic": "linear equations"}]. '
+        "Do not include markdown blocks like ```json. Just the raw array."
+    )
+    
+    user_content = f"Here is the syllabus text. Generate questions ONLY from this:\n\n{syllabus_text[:8000]}"
+
+    try:
+        raw = _text(model.invoke([
+            SystemMessage(content=sys),
+            HumanMessage(content=user_content),
+        ])).strip()
+        
+        # Clean up the response in case the AI adds markdown
+        if "```" in raw:
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        
+        raw = raw.strip()
+        if not raw.startswith("["):
+            raw = "[" + raw
+        if not raw.endswith("]"):
+            raw = raw + "]"
+
+        items = json.loads(raw)
+        
+        return [{"problem": str(i.get("problem", "")).strip(),
+                 "answer": str(i.get("answer", "")).strip(),
+                 "topic": str(i.get("topic", "")).strip(),
+                 "tag": "SYLLABUS"} for i in items]
+                 
+    except Exception as e:
+        print("SYLLABUS QUIZ ERROR:", e)
+        return []
+
+
 # ---------- scoring ----------
 
 def check_answer(question: dict, student_lines: list[str]) -> bool:
@@ -57,43 +108,3 @@ def score_summary(correct: int, total: int, elapsed: float) -> dict:
     else:
         grade = "💪 Try again"
     return {"pct": pct, "avg_seconds": avg, "grade": grade}
-
-def build_quiz_from_syllabus(syllabus_text: str, n_questions: int = 10) -> list[dict]:
-    """Ask the LLM to write N questions from the syllabus text, then verify each."""
-    from app.llm import _get_model, _text
-    from langchain_core.messages import HumanMessage, SystemMessage
-    import json, random
-
-    model = _get_model()
-    if model is None:
-        return []
-
-    sys = (
-        "You are a maths tutor. Read the syllabus or textbook excerpt the user provides. "
-        "Generate {n} short algebra problems that cover the topics listed. "
-        "Return ONLY a JSON array. Each item must be: "
-        '{{"problem": "2x + 3 = 11", "answer": "x = 4", "topic": "linear equations"}}. '
-        "No prose. No markdown code fences. Just the JSON array."
-    ).format(n=n_questions)
-    try:
-        raw = _text(model.invoke([
-            SystemMessage(content=sys),
-            HumanMessage(content=syllabus_text[:6000]),
-        ])).strip()
-        # Strip code fences if the model adds them
-        if raw.startswith("```"):
-            raw = raw.strip("`")
-            raw = raw[raw.find("["):raw.rfind("]") + 1]
-        items = json.loads(raw)
-        out = []
-        for item in items:
-            out.append({
-                "problem": str(item.get("problem", "")).strip(),
-                "answer": str(item.get("answer", "")).strip(),
-                "topic": str(item.get("topic", "")).strip(),
-                "tag": "SYLLABUS",
-            })
-        return out
-    except Exception as e:
-        print("SYLLABUS QUIZ ERROR:", e)
-        return []

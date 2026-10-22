@@ -16,9 +16,6 @@ from app.llm import (extract, explain_with_llm, explain_solution, answer_questio
                      simplify, translate_text)
 from app.presenter_ui import render as render_presenter
 
-# ============================================================
-# 1. NAME CHANGED HERE
-# ============================================================
 st.set_page_config(page_title="Mistake to Mastery", page_icon="🎓",
                    layout="wide", initial_sidebar_state="expanded")
 
@@ -355,9 +352,6 @@ def login_page():
     lang, t, s, lg = L()
     st.markdown("<style>[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl'],"
                 "[data-testid='collapsedControl']{display:none}</style>", unsafe_allow_html=True)
-    # ============================================================
-    # 2. NAME CHANGED HERE
-    # ============================================================
     hero("🎓 Mistake to Mastery", t["tagline"],
          ["🧠 Verified mistakes", "🗣️ 4 languages", "🎥 Gestures", "🎤 Voice", "📅 Planner"])
     _, mid, _ = st.columns([1, 1.6, 1])
@@ -595,9 +589,6 @@ def page_learn():
         st.rerun()
 
     lang_, t_, s_, lg_ = L()
-    # ============================================================
-    # 3. NAME CHANGED HERE
-    # ============================================================
     hero("🎓 Mistake to Mastery", t_["tagline"],
          ["🧠 Verified mistakes", "🗣️ 4 languages", "📇 Flashcards", "🎯 Quiz", "📅 Planner"])
     if ss.chat and st.button("🗑️ " + t_["clear"], key="clear_chat"):
@@ -726,21 +717,34 @@ def page_learn():
             if ss.ui_lang != start_lang:
                 st.rerun()
 
+    # ---------- read aloud + stop ----------
     last_reply = next((m["content"] for m in reversed(ss.chat)
                        if m["role"] == "assistant" and m.get("content")), None)
-    if last_reply and st.button("🔊 " + t_["read_aloud"], key="speak_btn"):
-        mp3 = speak(last_reply, CODE[ss.ui_lang])
-        if mp3:
-            st.audio(mp3, format="audio/mp3", autoplay=True)
-        else:
-            st.warning(t_["no_audio"])
-
     if last_reply:
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            if st.button("🔊 " + t_["read_aloud"], key="speak_btn"):
+                mp3 = speak(last_reply, CODE[ss.ui_lang])
+                if mp3:
+                    ss["audio_bytes"] = mp3
+                else:
+                    st.warning(t_["no_audio"])
+        with c2:
+            if st.button("🛑 Stop Audio", key="stop_audio"):
+                ss.pop("audio_bytes", None)
+                st.rerun()
+
         if st.button("💡 Explain this to me more simply", key="explain_more"):
             with st.spinner("..."):
                 simpler = simplify(last_reply, lang_) or t_["sorry"]
             say("assistant", simpler)
 
+    if ss.get("audio_bytes"):
+        st.audio(ss.audio_bytes, format="audio/mp3", autoplay=True)
+        time.sleep(2) 
+        ss.pop("audio_bytes", None)
+
+    # ---------- practice problem ----------
     tw = ss.get("twin")
     if tw:
         task, label = t_["tasks"].get(tw["subject"], ("Solve", "Your answer"))
