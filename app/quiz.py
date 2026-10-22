@@ -47,15 +47,18 @@ def build_quiz_from_syllabus(syllabus_text: str, n_questions: int = 10) -> list[
         return []
 
     sys = (
-        "You are a strict exam generator. Your ONLY job is to create questions based "
-        "exactly on the provided text. Do not use outside knowledge. "
-        f"Generate {n_questions} math/algebra problems that test the specific topics in the text. "
+        "You are a strict exam generator. The user will provide a text file. "
+        "You MUST generate math problems based ONLY on the specific topics mentioned in that text. "
+        "If the text mentions 'Fractions', generate fraction problems. If it mentions 'Calculus', generate calculus problems. "
+        "Do NOT use outside knowledge. Do NOT generate random algebra problems unless the text asks for them. "
+        f"Generate exactly {n_questions} problems. "
         "Return ONLY a valid JSON array. Each item must be exactly this format: "
         '[{"problem": "2x + 3 = 11", "answer": "x = 4", "topic": "linear equations"}]. '
         "Do not include markdown blocks like ```json. Just the raw array."
     )
     
-    user_content = f"Here is the syllabus text. Generate questions ONLY from this:\n\n{syllabus_text[:8000]}"
+    # We pass the text exactly as is, up to 12,000 characters
+    user_content = f"Here is the syllabus text. Generate questions ONLY from this:\n\n{syllabus_text[:12000]}"
 
     try:
         raw = _text(model.invoke([
@@ -85,8 +88,7 @@ def build_quiz_from_syllabus(syllabus_text: str, n_questions: int = 10) -> list[
     except Exception as e:
         print("SYLLABUS QUIZ ERROR:", e)
         return []
-
-
+        
 # ---------- scoring ----------
 
 def check_answer(question: dict, student_lines: list[str]) -> bool:
