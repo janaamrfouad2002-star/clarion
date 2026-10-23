@@ -494,6 +494,11 @@ if prompt:
     aud = getattr(prompt, "audio", None)
     typed = prompt.text or ""
     has_audio = aud is not None and not typed
+    
+    # If the user is speaking, cancel any playing audio immediately
+    if has_audio:
+        ss.pop("audio_bytes", None)
+        
     ss["inbox"] = {
         "text": typed,
         "img": files[0].getvalue() if files else None,
@@ -605,6 +610,8 @@ def page_learn():
             if ss.get("fb_audio") != h:
                 ss["fb_audio"] = h
                 fallback_audio = fb.getvalue()
+                # If voice input starts, kill audio
+                ss.pop("audio_bytes", None)
 
     chat_box = st.container()
     with chat_box:
@@ -1114,28 +1121,33 @@ def page_rooms():
 # ============================================================
 def page_gestures():
     lang_, t_, s_, lg_ = L()
-    hero("🎥 " + s_["gestures"], s_["gesture_help"])
-    c1, c2 = st.columns([3, 2])
-    with c1:
-        with st.container(border=True):
-            try:
-                from app.live_video import render_live_video, pop_gesture
-                render_live_video(key="learn_live", cooldown=3.5)
-                g = pop_gesture()
-                if g:
-                    apply_gesture(g)
-            except Exception as e:
-                st.warning(f"Live camera unavailable: {e}")
-    with c2:
-        with st.container(border=True):
-            st.markdown('<div class="sec">👋</div>', unsafe_allow_html=True)
-            for k in ("g_up", "g_down", "g_point", "g_palm"):
-                st.write(s_[k])
-            last = ss.get("last_gesture")
-            if last:
-                st.success(last[0])
-                st.markdown(last[1])
-    st.caption("💬 " + s_["chat_hint"])
+    hero("🎥 " + s_["gestures"], "Use your camera to show a hand sign.")
+
+    st.markdown('<div class="sec">📷 Take a photo of your hand sign</div>', unsafe_allow_html=True)
+    st.caption("Hold up a hand sign (like ✌️, 👍, 🤘, or ✋) and click 'Take Photo'. The AI will read it.")
+    
+    # Native browser camera (Snapshot, not upload)
+    shot = st.camera_input("Show a hand sign", key="gesture_snap", label_visibility="collapsed")
+    
+    if shot is not None:
+        data = shot.getvalue()
+        h = hashlib.md5(data).hexdigest()
+        if ss.get("last_shot") != h:
+            ss["last_shot"] = h
+            with st.spinner("Reading the sign..."):
+                try:
+                    from app.extras import recognise_gesture
+                    gestures, err = recognise_gesture(data)
+                    if err:
+                        st.warning(err)
+                    elif not gestures:
+                        st.info("I couldn't read a sign. Hold your hand clearly in the photo.")
+                    else:
+                        name, score = gestures[0]
+                        st.success(f"Detected: **{name}**")
+                        apply_gesture(name)
+                except Exception as e:
+                    st.error(f"Could not process image: {e}")
 
 
 # ============================================================
@@ -1146,21 +1158,7 @@ def page_planner():
     hero("📅 " + s_["planner"], s_["chat_hint"])
     c1, c2 = st.columns([2, 3])
     with c1:
-        with st.container(border=True):
-            st.markdown(f'<div class="sec">➕ {s_["add_task"]}</div>', unsafe_allow_html=True)
-            with st.form("add_task_form", clear_on_submit=True):
-                title = st.text_input(s_["task"])
-                subj = st.text_input(s_["subject"])
-                due_d = st.date_input("Due date (optional)", value=None,
-                                      key="plan_due_date")
-                pri = st.selectbox(s_["priority"], ["normal", "high", "low"])
-                submitted = st.form_submit_button(s_["add"], type="primary",
-                                                  use_container_width=True)
-                if submitted and title.strip():
-                    due_str = due_d.strftime("%Y-%m-%d") if due_d else ""
-                    academic.add_task(user, title.strip(), subj, due_str, pri)
-                    st.rerun()
-
+        # ---- Generate Plan (First) ----
         with st.container(border=True):
             st.markdown(f'<div class="sec">📚 {s_.get("plan_syllabus", "Generate a plan from your syllabus")}</div>',
                         unsafe_allow_html=True)
@@ -1193,6 +1191,22 @@ def page_planner():
                         st.rerun()
                     else:
                         st.error("Could not build the plan. Check GOOGLE_API_KEY.")
+        
+        # ---- Add task ----
+        with st.container(border=True):
+            st.markdown(f'<div class="sec">➕ {s_["add_task"]}</div>', unsafe_allow_html=True)
+            with st.form("add_task_form", clear_on_submit=True):
+                title = st.text_input(s_["task"])
+                subj = st.text_input(s_["subject"])
+                due_d = st.date_input("Due date (optional)", value=None,
+                                      key="plan_due_date")
+                pri = st.selectbox(s_["priority"], ["normal", "high", "low"])
+                submitted = st.form_submit_button(s_["add"], type="primary",
+                                                  use_container_width=True)
+                if submitted and title.strip():
+                    due_str = due_d.strftime("%Y-%m-%d") if due_d else ""
+                    academic.add_task(user, title.strip(), subj, due_str, pri)
+                    st.rerun()
 
         with st.container(border=True):
             st.markdown('<div class="sec">📧 Daily email reminder</div>',
