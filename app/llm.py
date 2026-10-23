@@ -21,6 +21,7 @@ PROMPT = ChatPromptTemplate.from_messages([
      "Reply in under 80 words: explain the misconception simply, then ask ONE "
      "short question that helps the student notice the mistake. "
      "If the error type is UNKNOWN, say your guess is unverified. "
+     "Do NOT use LaTeX formatting. Write math using plain text symbols (like / for division, * for multiplication). "
      "Reply in {lang}."),
     ("human",
      "The student went from:\n{prev}\nto:\n{wrong}\nVerified error type: {tag}"),
@@ -28,8 +29,6 @@ PROMPT = ChatPromptTemplate.from_messages([
 
 
 def _get_model(vision: bool = False):
-    """Pick the provider with LLM_PROVIDER in .env: groq, gemini or ollama.
-    vision=True forces Gemini, because the Groq text models can't read photos."""
     provider = os.getenv("LLM_PROVIDER", "gemini")
     if vision:
         provider = "gemini"
@@ -49,7 +48,6 @@ def _get_model(vision: bool = False):
 
 
 def _text(resp) -> str:
-    """Models may return a string or a list of parts. Always give back plain text."""
     c = resp.content
     if isinstance(c, str):
         return c
@@ -60,7 +58,6 @@ _TR_CACHE = {}
 
 
 def translate_text(text: str, lang: str) -> str:
-    """Translate fixed texts (template hints, mistake names). Falls back to the original."""
     if not text or lang == "English":
         return text
     key = (text, lang)
@@ -133,7 +130,6 @@ def _content(text: str, image_bytes, mime: str):
 
 
 def _offline_extract(text: str) -> Extracted:
-    """No AI needed: simple pattern matching for the easy cases (English only)."""
     low = text.lower().strip()
     m = re.search(r"(derivative|differentiate|integral|integrate)\s*(?:of)?\s*(.+)", low)
     if m:
@@ -158,7 +154,6 @@ def extract(text: str, image_bytes=None, mime: str = "image/png") -> Extracted:
 
 
 def explain_solution(question: str, answer: str, lang: str = "English", label: str = None) -> str:
-    """Software already computed the answer; the AI only explains how to get there."""
     base = f"**{label or 'Answer (computed by software)'}:** `{answer}`"
     model = _get_model()
     if model is None:
@@ -167,7 +162,8 @@ def explain_solution(question: str, answer: str, lang: str = "English", label: s
         msgs = [SystemMessage(content=(
                     "A tutor for school students. Software computed the correct answer. "
                     "Never change it. Explain the method in simple words, in at most 6 short "
-                    f"steps. Reply in {lang}.")),
+                    "steps. Do NOT use LaTeX formatting (no \\begin or \\( \\). Use plain text symbols. "
+                    f"Reply in {lang}.")),
                 HumanMessage(content=f"Question: {question}\nCorrect answer: {answer}")]
         return base + "\n\n" + _text(model.invoke(msgs))
     except Exception as e:
@@ -177,7 +173,6 @@ def explain_solution(question: str, answer: str, lang: str = "English", label: s
 
 def answer_question(text: str, image_bytes=None, mime: str = "image/png",
                     lang: str = "English") -> str:
-    """For subjects with no verifier. Not checked by software."""
     model = _get_model(vision=bool(image_bytes))
     if model is None:
         return "I need an AI key in `.env` to answer this kind of question."
@@ -187,6 +182,9 @@ def answer_question(text: str, image_bytes=None, mime: str = "image/png",
                     "chemistry, biology, languages and more). Answer in simple language, step by "
                     "step, and keep it short. If the student included their own attempt, point out "
                     "exactly where it goes wrong. If you are not sure, say so. "
+                    "NEVER use LaTeX formatting like \\( \\) or \\begin{bmatrix}. "
+                    "Write math using only standard text symbols like / for division, "
+                    "* for multiplication, and square brackets like [1, 2] for matrices. "
                     f"Always reply in {lang}.")),
                 HumanMessage(content=_content(text, image_bytes, mime))]
         return _text(model.invoke(msgs))
@@ -196,7 +194,6 @@ def answer_question(text: str, image_bytes=None, mime: str = "image/png",
 
 
 def simplify(text: str, lang: str = "English"):
-    """Used by the thumbs-down gesture: explain the last answer again, more simply."""
     model = _get_model()
     if model is None:
         return None
@@ -204,7 +201,8 @@ def simplify(text: str, lang: str = "English"):
         msgs = [SystemMessage(content=(
                     "You are a kind tutor for school students. The student did not understand "
                     "the explanation below. Explain it again more simply, with one small example, "
-                    f"in at most 5 short sentences. Reply in {lang}.")),
+                    "in at most 5 short sentences. Do NOT use LaTeX formatting. "
+                    f"Reply in {lang}.")),
                 HumanMessage(content=text)]
         return _text(model.invoke(msgs))
     except Exception as e:

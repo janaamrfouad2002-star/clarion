@@ -527,7 +527,8 @@ def render(m):
     else:
         with st.chat_message(m["role"]):
             if m.get("content"):
-                st.markdown(m["content"])
+                # Using st.write allows Streamlit to auto-render simple math
+                st.write(m["content"])
             if m.get("img"):
                 st.image(m["img"], width=300)
 
