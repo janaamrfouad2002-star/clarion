@@ -1,11 +1,11 @@
-"""presenter.py - live presenter bot: talk, answer, translate."""
+"""presenter.py - live presentation bot: talk, answer, translate."""
 from dotenv import load_dotenv
 from app.llm import _get_model, _text
 from app.extras import transcribe, speak, detect_language
 
 load_dotenv()
 
-
+# Full language name -> gTTS code.
 LANG_TO_GTTS = {
     "English": "en",
     "Hindi": "hi",
@@ -13,10 +13,9 @@ LANG_TO_GTTS = {
     "French": "fr",
 }
 
-
 SCRIPT = {
     "English": {
-        "intro": ("Hello everyone! I'm the Mistake-to-Mastery assistant. "
+        "intro": ("Hello everyone! I'm the Clarion assistant. "
                   "I don't just give answers — I find the exact step where a student went wrong, "
                   "name the misconception, and give them a similar problem to practise."),
         "beats": [
@@ -27,43 +26,43 @@ SCRIPT = {
             ("The proof", "100 auto-generated cases per mistake type measure accuracy."),
             ("The reach", "Ask in English, Hindi, Arabic or French."),
         ],
-        "outro": "That's Mistake-to-Mastery. Ask me anything — in any language.",
+        "outro": "That's Clarion. Ask me anything — in any language.",
         "not_understood": "I didn't catch that. Try again, or say 'translate'.",
         "demo_offer": "Want to see it live? Ask me a maths question.",
     },
     "Hindi": {
-        "intro": "नमस्ते! मैं Mistake-to-Mastery सहायक हूँ। मैं ठीक वह चरण ढूँढती हूँ जहाँ गलती हुई।",
+        "intro": "नमस्ते! मैं Clarion सहायक हूँ। मैं ठीक वह चरण ढूँढती हूँ जहाँ गलती हुई।",
         "beats": [("समस्या", "ज़्यादातर ट्यूटर सिर्फ अंतिम उत्तर देते हैं।"),
                   ("विचार", "हम हर पंक्ति की तुलना करते हैं।"),
                   ("निदान", "गलतफहमियों की लाइब्रेरी नाम बताती है।"),
                   ("सुधार", "उसी गलतफहमी पर नया सवाल।"),
                   ("प्रमाण", "100 केस से सटीकता मापी जाती है।"),
                   ("पहुँच", "अंग्रेज़ी, हिन्दी, अरबी या फ़्रेंच में।")],
-        "outro": "यही है Mistake-to-Mastery।",
+        "outro": "यही है Clarion।",
         "not_understood": "मैं समझ नहीं पायी।",
         "demo_offer": "कोई गणित सवाल पूछें।",
     },
     "Arabic": {
-        "intro": "مرحباً! أنا مساعدة Mistake-to-Mastery. أجد الخطوة التي أخطأ فيها الطالب.",
+        "intro": "مرحباً! أنا مساعدة Clarion. أجد الخطوة التي أخطأ فيها الطالب.",
         "beats": [("المشكلة", "معظم المدرّسين يعطون الجواب النهائي فقط."),
                   ("الفكرة", "نقارن كل سطر بالسطر السابق."),
                   ("التشخيص", "مكتبة المفاهيم الخاطئة تسمّي الخطأ."),
                   ("الحل", "مسألة جديدة على نفس المفهوم."),
                   ("الدليل", "نقيس الدقة على 100 حالة."),
                   ("الانتشار", "بالإنجليزية أو الهندية أو العربية أو الفرنسية.")],
-        "outro": "هذا هو Mistake-to-Mastery.",
+        "outro": "هذا هو Clarion.",
         "not_understood": "لم أفهم.",
         "demo_offer": "اطرح سؤالاً في الرياضيات.",
     },
     "French": {
-        "intro": "Bonjour ! Je suis l'assistante Mistake-to-Mastery. Je trouve l'étape exacte où l'élève s'est trompé.",
+        "intro": "Bonjour ! Je suis l'assistante Clarion. Je trouve l'étape exacte où l'élève s'est trompé.",
         "beats": [("Le problème", "La plupart des tuteurs donnent la réponse finale."),
                   ("L'idée", "On compare chaque ligne avec la précédente."),
                   ("Le diagnostic", "Une bibliothèque d'erreurs connues la nomme."),
                   ("Le remède", "Un nouvel exercice sur la même erreur."),
                   ("La preuve", "100 cas mesurent la précision."),
                   ("La portée", "Anglais, hindi, arabe ou français.")],
-        "outro": "Voilà Mistake-to-Mastery.",
+        "outro": "Voilà Clarion.",
         "not_understood": "Je n'ai pas compris.",
         "demo_offer": "Posez une question de maths.",
     },
@@ -99,11 +98,7 @@ def translate(text: str, target_lang: str) -> str:
     try:
         from langchain_core.messages import HumanMessage, SystemMessage
         msgs = [
-            SystemMessage(content=(
-                f"Translate the following into {target_lang}. "
-                "Keep maths, numbers and backticked text unchanged. "
-                "Reply with the translation only."
-            )),
+            SystemMessage(content=f"Translate into {target_lang}. Keep maths and numbers unchanged. Reply with translation only."),
             HumanMessage(content=text),
         ]
         return _text(model.invoke(msgs)).strip() or text
@@ -112,28 +107,11 @@ def translate(text: str, target_lang: str) -> str:
         return text
 
 
-# ------------------------------------------------------------
-# Broad, honest presenter prompt
-# ------------------------------------------------------------
 PRESENTER_SYSTEM = (
-    "You are a friendly presenter bot at a live demo of a school project "
-    "called Mistake-to-Mastery (an AI tutor that finds the exact step where a "
-    "student went wrong). The audience may ask you ANY question — about the "
-    "project, about maths, about other subjects, or about general knowledge. "
-
-    "RULES: "
-    "1. Answer the question directly, in 2 to 5 short sentences. "
-    "2. If the question is about the project, explain it warmly. "
-    "3. If the question is about maths, physics, chemistry or programming, "
-    "give a short, correct answer. "
-    "4. If the question is about history, religion, people, art, or anything "
-    "outside school subjects, answer factually and briefly. "
-    "NEVER invent facts. If you are unsure, say so plainly: 'I'm not sure about that.' "
-    "5. Do NOT steer every question back to the Mistake-to-Mastery project — only "
-    "mention it if the user asks about it, or if the question is about studying "
-    "in general. "
-    "6. Always reply in {lang}. If the user mixes languages, reply in {lang}. "
-    "Do not use markdown headings. Keep it conversational."
+    "You are a friendly presenter bot for a school project called Clarion. "
+    "Answer the audience's question in 2 to 4 short sentences. "
+    "Explain the project, its features, or the maths behind the demo. "
+    "Be warm, confident and concise. Always reply in {lang}."
 )
 
 
@@ -143,11 +121,9 @@ def respond(text: str, lang: str = "English", context: str = "") -> str:
         return _t(lang)["not_understood"]
     try:
         from langchain_core.messages import HumanMessage, SystemMessage
-        user_msg = text if not context else f"Context:\n{context}\n\nQuestion: {text}"
-        reply = _text(model.invoke([
-            SystemMessage(content=PRESENTER_SYSTEM.format(lang=lang)),
-            HumanMessage(content=user_msg),
-        ]))
+        user = text if not context else f"Context:\n{context}\n\nQuestion: {text}"
+        reply = _text(model.invoke([SystemMessage(content=PRESENTER_SYSTEM.format(lang=lang)),
+                                    HumanMessage(content=user)]))
         return reply.strip() or _t(lang)["not_understood"]
     except Exception as e:
         print("RESPOND ERROR:", e)

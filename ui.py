@@ -16,7 +16,7 @@ from app.llm import (extract, explain_with_llm, explain_solution, answer_questio
                      simplify, translate_text)
 from app.presenter_ui import render as render_presenter
 
-st.set_page_config(page_title="Mistake to Mastery", page_icon="🎓",
+st.set_page_config(page_title="Clarion", page_icon="🎓",
                    layout="wide", initial_sidebar_state="expanded")
 
 # ============================================================
@@ -352,7 +352,7 @@ def login_page():
     lang, t, s, lg = L()
     st.markdown("<style>[data-testid='stSidebar'],[data-testid='stSidebarCollapsedControl'],"
                 "[data-testid='collapsedControl']{display:none}</style>", unsafe_allow_html=True)
-    hero("🎓 Mistake to Mastery", t["tagline"],
+    hero("🎓 Clarion", t["tagline"],
          ["🧠 Verified mistakes", "🗣️ 4 languages", "🎥 Gestures", "🎤 Voice", "📅 Planner"])
     _, mid, _ = st.columns([1, 1.6, 1])
     with mid:
@@ -559,13 +559,13 @@ def apply_gesture(name: str):
 # ONBOARDING TOUR
 # ============================================================
 def page_tour():
-    hero("👋 Welcome to Mistake to Mastery", "A 30-second tour before you start.")
+    hero("👋 Welcome to Clarion", "A 30-second tour before you start.")
     steps = [
         ("1. Type your working",
          "In the box at the bottom of the Learn page, type your steps — one "
          "equation per line. Or speak, or upload a photo of your notebook."),
         ("2. We find the mistake",
-         "Mistake to Mastery compares each line to the previous one, finds the first line "
+         "Clarion compares each line to the previous one, finds the first line "
          "that changed the answer, and names the misconception behind it."),
         ("3. Practice on a twin problem",
          "After every mistake you get a fresh problem with the same structure "
@@ -595,7 +595,7 @@ def page_learn():
         st.rerun()
 
     lang_, t_, s_, lg_ = L()
-    hero("🎓 Mistake to Mastery", t_["tagline"],
+    hero("🎓 Clarion", t_["tagline"],
          ["🧠 Verified mistakes", "🗣️ 4 languages", "📇 Flashcards", "🎯 Quiz", "📅 Planner"])
     if ss.chat and st.button("🗑️ " + t_["clear"], key="clear_chat"):
         ss.chat = []

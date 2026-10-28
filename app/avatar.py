@@ -1,4 +1,4 @@
-"""avatar.py - a pretty animated cartoon avatar with lip-sync, blinking and motion."""
+"""avatar.py - an animated cartoon avatar with real lip-sync, blinking and motion."""
 import base64
 
 import streamlit.components.v1 as components
@@ -8,7 +8,7 @@ def _b64_audio(audio_bytes: bytes) -> str:
     return base64.b64encode(audio_bytes).decode()
 
 
-def avatar_card(name: str = "Mistake-to-Mastery",
+def avatar_card(name: str = "Clarion",
                 subtitle: str = "Your AI presenter",
                 audio_bytes: bytes | None = None,
                 autoplay: bool = False):
@@ -64,30 +64,25 @@ def avatar_card(name: str = "Mistake-to-Mastery",
 
           <!-- head group -->
           <g id="head">
-            <!-- face -->
             <ellipse cx="110" cy="110" rx="42" ry="50" fill="#f2c69f"/>
             <path d="M78,128 Q110,160 142,128" fill="#f2c69f"/>
 
-            <!-- ears + earrings -->
             <ellipse cx="70" cy="112" rx="6" ry="9" fill="#eab88e"/>
             <ellipse cx="150" cy="112" rx="6" ry="9" fill="#eab88e"/>
             <circle cx="70" cy="124" r="2.4" fill="#c9c9d6"/>
             <circle cx="150" cy="124" r="2.4" fill="#c9c9d6"/>
 
-            <!-- front hair -->
             <path d="M66,100 C64,60 78,42 110,42 C142,42 156,60 154,100
                      C150,74 138,60 110,60 C82,60 70,74 66,100 Z" fill="#3a2419"/>
             <path d="M66,90 C74,68 94,60 118,64 C100,68 86,78 78,96 Z" fill="#4b2f22"/>
             <path d="M148,80 Q158,110 152,150" stroke="#3a2419" stroke-width="4"
                   fill="none" stroke-linecap="round"/>
 
-            <!-- eyebrows (raised, friendly) -->
             <path d="M84,92 Q92,86 100,91" stroke="#3a2419" stroke-width="2.8"
                   fill="none" stroke-linecap="round"/>
             <path d="M120,91 Q128,86 136,92" stroke="#3a2419" stroke-width="2.8"
                   fill="none" stroke-linecap="round"/>
 
-            <!-- eyes: blinks + glances -->
             <g id="eyes">
               <path d="M78,101 Q88,95 98,101" stroke="#2a1a12" stroke-width="2.4"
                     fill="none" stroke-linecap="round"/>
@@ -105,15 +100,12 @@ def avatar_card(name: str = "Mistake-to-Mastery",
               <ellipse id="lidR" cx="132" cy="109" rx="9" ry="8" fill="#f2c69f" opacity="0"/>
             </g>
 
-            <!-- blush -->
             <ellipse id="blushL" cx="82" cy="126" rx="9" ry="5.5" fill="#ef8a8a" opacity="0.45"/>
             <ellipse id="blushR" cx="138" cy="126" rx="9" ry="5.5" fill="#ef8a8a" opacity="0.45"/>
 
-            <!-- nose -->
             <path d="M110,118 L110,127 Q111,130 115,129" stroke="#d29a72"
                   stroke-width="1.8" fill="none" stroke-linecap="round"/>
 
-            <!-- lips: warm smiling mouth with teeth -->
             <g id="mouth" transform="translate(110,140)">
               <path class="lipLine"
                     d="M-14,-1 Q-7,-6 0,-3 Q7,-6 14,-1"
@@ -124,7 +116,6 @@ def avatar_card(name: str = "Mistake-to-Mastery",
             </g>
           </g>
 
-          <!-- sparkles while speaking -->
           <g id="sparkles" opacity="0">
             <circle class="sp s1" cx="30" cy="60" r="3" fill="#fbbf24"/>
             <circle class="sp s2" cx="190" cy="80" r="3" fill="#a78bfa"/>
@@ -199,7 +190,6 @@ def avatar_card(name: str = "Mistake-to-Mastery",
       93%, 96%       {{ opacity: 1; }}
     }}
 
-    /* speaking mode */
     .girl.speaking {{ animation: talkBob 0.55s ease-in-out infinite; }}
     @keyframes talkBob {{
       0%,100% {{ transform: translateY(0) rotate(-0.6deg); }}
@@ -304,7 +294,7 @@ def avatar_card(name: str = "Mistake-to-Mastery",
 
 def render_presenter_avatar(audio_bytes: bytes | None = None, autoplay: bool = False):
     avatar_card(
-        name="Mistake-to-Mastery",
+        name="Clarion",
         subtitle="Your AI presenter · speaking",
         audio_bytes=audio_bytes,
         autoplay=autoplay,
